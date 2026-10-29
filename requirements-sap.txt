@@ -1,0 +1,3 @@
+# SAP connections. Install on Day 1 of the build guide.
+sap-ai-sdk-gen     # SAP Generative AI Hub (SAP AI Core)
+hdbcli             # SAP HANA Cloud database driver

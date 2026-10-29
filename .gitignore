@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+reroute.db
+results/
+data/s4_sandbox_pos.csv

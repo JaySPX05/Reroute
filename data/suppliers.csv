@@ -1,0 +1,20 @@
+supplier_id,name,tier,city,state,lat,lon,buffer_days,is_msme,import_port
+S01,Hosur Precision Castings,1,Hosur,Tamil Nadu,12.7409,77.8253,3,1,
+S02,Coimbatore Alloy Works,1,Coimbatore,Tamil Nadu,11.0168,76.9558,3,1,
+S03,Pune Foundry Ltd,1,Pune,Maharashtra,18.7603,73.863,5,0,
+S04,Chennai Brake Systems,1,Chennai,Tamil Nadu,12.9675,79.9419,4,0,
+S05,Mysuru Brakes & Clutches,1,Mysuru,Karnataka,12.2958,76.6394,3,1,
+S06,Hosur Harness Co,1,Hosur,Tamil Nadu,12.7409,77.8253,2,1,
+S07,Tumakuru Wiring Pvt Ltd,1,Tumakuru,Karnataka,13.3379,77.1173,3,1,
+S08,Bengaluru E-Motors,1,Bengaluru,Karnataka,13.0285,77.5197,4,0,
+S09,Manesar Motor Tech,1,Manesar,Haryana,28.354,76.94,6,0,
+S10,Chennai Cell Packs,1,Chennai,Tamil Nadu,12.9675,79.9419,3,0,
+S11,Bengaluru PCB Assembly,1,Bengaluru,Karnataka,13.0285,77.5197,6,1,
+S12,Hosur Frames & Fabrication,1,Hosur,Tamil Nadu,12.7409,77.8253,2,1,
+S13,Madurai Steel Frames,1,Madurai,Tamil Nadu,9.9252,78.1198,3,1,
+S14,Chennai Tyres,1,Chennai,Tamil Nadu,12.9675,79.9419,7,0,
+S15,Pune Battery Systems,1,Pune,Maharashtra,18.7603,73.863,4,0,
+S20,Hosur Aluminium Smelters,2,Hosur,Tamil Nadu,12.7409,77.8253,0,1,
+S21,Coimbatore Copper Drawing,2,Coimbatore,Tamil Nadu,11.0168,76.9558,0,1,
+S22,Pune Magnetics,2,Pune,Maharashtra,18.7603,73.863,0,1,Nhava Sheva
+S23,Chennai Cell Imports,2,Chennai,Tamil Nadu,12.9675,79.9419,0,0,Chennai

@@ -1,0 +1,13 @@
+material_id,name,unit,plant_cover_days
+M01,Aluminium wheel casting,pcs,3
+M02,Brake assembly,sets,4
+M03,Wiring harness,pcs,3
+M04,Hub motor,pcs,3
+M05,Battery pack,pcs,3
+M06,Controller PCB,pcs,5
+M07,Chassis frame,pcs,3
+M08,Tyre set,sets,6
+M20,Aluminium ingot,kg,0
+M21,Copper wire,kg,0
+M22,NdFeB magnets,pcs,0
+M23,Li-ion cells,pcs,0

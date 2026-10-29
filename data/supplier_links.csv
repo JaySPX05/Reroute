@@ -1,0 +1,10 @@
+child_supplier_id,parent_supplier_id,input_material_id,share,cost_share
+S20,S01,M20,0.85,0.45
+S20,S02,M20,0.3,0.45
+S20,S12,M20,0.4,0.3
+S21,S06,M21,0.7,0.4
+S21,S07,M21,0.6,0.4
+S21,S08,M21,0.5,0.15
+S22,S08,M22,0.9,0.25
+S22,S09,M22,0.4,0.25
+S23,S10,M23,0.95,0.6
