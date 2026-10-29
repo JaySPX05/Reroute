@@ -5,3 +5,5 @@ __pycache__/
 reroute.db
 results/
 data/s4_sandbox_pos.csv
+test.db
+.pytest_cache/
