@@ -223,7 +223,7 @@ with tab_done:
                            "extra_cost", "supplier_message"]].iloc[::-1], hide_index=True, width="stretch")
 
 with tab_audit:
-    rows = db.read_rows("audit_log")
+    rows = db.read_rows("agent_audit_log")
     c1, c2 = st.columns([1, 3])
     if c1.button("Verify audit trail"):
         v = network.verify_audit(rows)

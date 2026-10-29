@@ -1,41 +1,41 @@
 sales_order_id,customer,product_id,qty,due_date,priority
-SO4501,Namma Rides,P2,150,2026-11-02,Medium
-SO4504,Metro Two-Wheelers,P1,120,2026-11-02,High
-SO4503,Namma Rides,P1,40,2026-11-03,High
-SO4512,Deccan EV Fleet,P2,200,2026-11-04,High
-SO4533,Deccan EV Fleet,P3,40,2026-11-04,Low
-SO4502,Deccan EV Fleet,P1,150,2026-11-05,Low
-SO4520,Coastal Auto Dealers,P1,60,2026-11-06,Low
-SO4522,Kaveri Motors (dealer),P3,120,2026-11-06,Medium
-SO4523,Metro Two-Wheelers,P3,150,2026-11-06,High
-SO4506,Coastal Auto Dealers,P2,150,2026-11-07,Medium
-SO4515,QuickDrop Logistics,P2,120,2026-11-07,Low
-SO4535,Metro Two-Wheelers,P3,80,2026-11-07,Medium
-SO4514,Deccan EV Fleet,P1,150,2026-11-08,Medium
-SO4516,Namma Rides,P1,150,2026-11-10,Medium
-SO4510,GreenMile Delivery,P1,200,2026-11-11,Medium
-SO4529,Namma Rides,P3,200,2026-11-11,Medium
-SO4508,Kaveri Motors (dealer),P1,120,2026-11-13,Medium
-SO4518,GreenMile Delivery,P2,80,2026-11-14,High
-SO4524,Govt e-Mobility Tender,P1,100,2026-11-14,Medium
-SO4537,Govt e-Mobility Tender,P2,150,2026-11-14,Medium
-SO4521,Namma Rides,P2,120,2026-11-15,Medium
-SO4527,Coastal Auto Dealers,P1,60,2026-11-15,Medium
-SO4513,QuickDrop Logistics,P1,150,2026-11-16,Low
-SO4538,Deccan EV Fleet,P3,40,2026-11-16,High
-SO4519,Govt e-Mobility Tender,P1,100,2026-11-17,Low
-SO4531,GreenMile Delivery,P1,40,2026-11-17,High
-SO4509,Metro Two-Wheelers,P2,40,2026-11-19,Low
-SO4525,Deccan EV Fleet,P1,200,2026-11-19,Low
-SO4526,GreenMile Delivery,P2,200,2026-11-19,Medium
-SO4534,Govt e-Mobility Tender,P3,200,2026-11-19,High
-SO4536,Namma Rides,P3,200,2026-11-19,Low
-SO4505,Kaveri Motors (dealer),P1,80,2026-11-20,Low
-SO4539,Namma Rides,P1,120,2026-11-20,High
-SO4511,Namma Rides,P1,40,2026-11-24,High
-SO4540,Deccan EV Fleet,P1,150,2026-11-24,High
-SO4507,Metro Two-Wheelers,P1,80,2026-11-26,High
-SO4517,Kaveri Motors (dealer),P2,200,2026-11-26,High
-SO4528,Deccan EV Fleet,P3,60,2026-11-26,Medium
-SO4530,Kaveri Motors (dealer),P1,60,2026-11-26,Medium
-SO4532,Namma Rides,P3,80,2026-11-27,High
+SO4501,Namma Rides,P2,150,2026-11-01,Medium
+SO4504,Metro Two-Wheelers,P1,120,2026-11-01,High
+SO4503,Namma Rides,P1,40,2026-11-02,High
+SO4512,Deccan EV Fleet,P2,200,2026-11-03,High
+SO4533,Deccan EV Fleet,P3,40,2026-11-03,Low
+SO4502,Deccan EV Fleet,P1,150,2026-11-04,Low
+SO4520,Coastal Auto Dealers,P1,60,2026-11-05,Low
+SO4522,Kaveri Motors (dealer),P3,120,2026-11-05,Medium
+SO4523,Metro Two-Wheelers,P3,150,2026-11-05,High
+SO4506,Coastal Auto Dealers,P2,150,2026-11-06,Medium
+SO4515,QuickDrop Logistics,P2,120,2026-11-06,Low
+SO4535,Metro Two-Wheelers,P3,80,2026-11-06,Medium
+SO4514,Deccan EV Fleet,P1,150,2026-11-07,Medium
+SO4516,Namma Rides,P1,150,2026-11-09,Medium
+SO4510,GreenMile Delivery,P1,200,2026-11-10,Medium
+SO4529,Namma Rides,P3,200,2026-11-10,Medium
+SO4508,Kaveri Motors (dealer),P1,120,2026-11-12,Medium
+SO4518,GreenMile Delivery,P2,80,2026-11-13,High
+SO4524,Govt e-Mobility Tender,P1,100,2026-11-13,Medium
+SO4537,Govt e-Mobility Tender,P2,150,2026-11-13,Medium
+SO4521,Namma Rides,P2,120,2026-11-14,Medium
+SO4527,Coastal Auto Dealers,P1,60,2026-11-14,Medium
+SO4513,QuickDrop Logistics,P1,150,2026-11-15,Low
+SO4538,Deccan EV Fleet,P3,40,2026-11-15,High
+SO4519,Govt e-Mobility Tender,P1,100,2026-11-16,Low
+SO4531,GreenMile Delivery,P1,40,2026-11-16,High
+SO4509,Metro Two-Wheelers,P2,40,2026-11-18,Low
+SO4525,Deccan EV Fleet,P1,200,2026-11-18,Low
+SO4526,GreenMile Delivery,P2,200,2026-11-18,Medium
+SO4534,Govt e-Mobility Tender,P3,200,2026-11-18,High
+SO4536,Namma Rides,P3,200,2026-11-18,Low
+SO4505,Kaveri Motors (dealer),P1,80,2026-11-19,Low
+SO4539,Namma Rides,P1,120,2026-11-19,High
+SO4511,Namma Rides,P1,40,2026-11-23,High
+SO4540,Deccan EV Fleet,P1,150,2026-11-23,High
+SO4507,Metro Two-Wheelers,P1,80,2026-11-25,High
+SO4517,Kaveri Motors (dealer),P2,200,2026-11-25,High
+SO4528,Deccan EV Fleet,P3,60,2026-11-25,Medium
+SO4530,Kaveri Motors (dealer),P1,60,2026-11-25,Medium
+SO4532,Namma Rides,P3,80,2026-11-26,High

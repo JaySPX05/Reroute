@@ -82,7 +82,7 @@ def test_agent_network_autonomy_approval_and_audit():
     net.decide(second, False, "no")
     net.run_all()
     assert net.stats["approved"] == 1 and net.stats["rejected"] == 1
-    rows = db.read_rows("audit_log")
+    rows = db.read_rows("agent_audit_log")
     assert network.verify_audit(rows)["ok"]
     rows.loc[rows.index[3], "summary"] = "edited"
     assert not network.verify_audit(rows)["ok"]

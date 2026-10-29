@@ -23,7 +23,7 @@ RUNTIME_DDL = {
     "plan_actions": ["action_id", "created_at", "event_id", "plan_name", "action_type", "po_id",
                      "details", "supplier_message", "status", "decided_by", "policy_rule", "extra_cost",
                      "s4_request"],
-    "audit_log": ["seq", "ts", "run_id", "sender", "recipient", "kind", "summary", "details",
+    "agent_audit_log": ["seq", "ts", "run_id", "sender", "recipient", "kind", "summary", "details",
                   "prev_hash", "hash"],
 }
 
@@ -112,7 +112,7 @@ def _drop(cur, table):
 
 
 def _create_runtime(cur, table):
-    width = 5000 if table == "audit_log" else 2000
+    width = 5000 if table == "agent_audit_log" else 2000
     cols = ", ".join(f"{_q(c)} NVARCHAR({width})" for c in RUNTIME_DDL[table])
     cur.execute(f"CREATE TABLE {_q(table)} ({cols})")
 

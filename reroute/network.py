@@ -57,7 +57,7 @@ class AuditLog:
         self.last_hash, self.next_seq = "GENESIS", 1
         if persist:
             db.ensure_runtime_tables()
-            rows = db.read_rows("audit_log")
+            rows = db.read_rows("agent_audit_log")
             if len(rows):
                 rows = rows.sort_values("seq")
                 self.last_hash = rows.iloc[-1]["hash"]
@@ -77,7 +77,7 @@ class AuditLog:
                "prev_hash": self.last_hash}
         rec["hash"] = self.digest(self.last_hash, rec)
         if self.persist:
-            db.insert_row("audit_log", rec)
+            db.insert_row("agent_audit_log", rec)
         self.records.append(rec)
         self.last_hash, self.next_seq = rec["hash"], self.next_seq + 1
         msg.seq, msg.hash = int(rec["seq"]), rec["hash"]
