@@ -23,10 +23,12 @@ MATERIAL_WORDS = {"M23": ["lithium", "li-ion", "battery cell", "cells"], "M22": 
 KEYWORDS = {
     # port and tariff come first so they win ties against the generic transport words
     "port": ["port closure", "port closed", "port shut", "terminal operations suspended", "port operations suspended",
-             "terminal closed", "shipping suspended", "vessels diverted", "port authority"],
-    "tariff": ["tariff", "import duty", "customs duty", "anti-dumping", "duty hike", "countervailing duty", "safeguard duty"],
-    "flood": ["flood", "waterlog", "heavy rain", "extremely heavy rainfall", "inundat", "cyclone", "red alert",
-              "orange alert", "deluge", "submerged", "overflow"],
+             "terminal closed", "shipping suspended", "vessels diverted", "port authority", "port gates",
+             "port blocked"],
+    "tariff": ["tariff", "import duty", "customs duty", "anti-dumping", "duty hike", "countervailing duty", "safeguard duty",
+               "levy"],
+    "flood": ["flood", "waterlog", "water-logged", "heavy rain", "extremely heavy rainfall", "inundat", "cyclone",
+              "red alert", "orange alert", "deluge", "submerged", "overflow", "downpour", "knee-deep", "cloudburst"],
     "strike": ["strike", "bandh", "agitation", "walkout", "lockout", "go-slow"],
     "fire": ["fire", "blaze", "explosion", "blast"],
     "power": ["power cut", "power shutdown", "power outage", "outage", "load shedding", "grid failure"],
@@ -34,13 +36,17 @@ KEYWORDS = {
                   "customs", "bridge collapse", "suspend operations"],
     "equipment": ["breakdown", "machine failure", "furnace", "line down"],
 }
-NEGATIONS = ["no warnings", "no warning issued", "light to moderate", "called off", "withdrawn"]
+NEGATIONS = ["no warnings", "no warning issued", "light to moderate", "called off", "calls off", "call off",
+             "withdraw", "mock drill", "safety drill", "no impact on production", "no disruption expected"]
 HIGH_WORDS = ["halted", "shut", "suspended", "indefinite", "red alert", "destroyed", "submerged", "extremely"]
 
 ALIASES = {"bangalore": "Bengaluru", "peenya": "Bengaluru", "sriperumbudur": "Chennai", "kancheepuram": "Chennai",
            "ennore": "Chennai", "chakan": "Pune", "kovai": "Coimbatore", "mysore": "Mysuru", "tumkur": "Tumakuru",
            "gurugram": "Manesar", "gurgaon": "Manesar", "krishnagiri": "Hosur", "sipcot": "Hosur",
-           "jnpt": "Nhava Sheva", "jawaharlal nehru port": "Nhava Sheva"}
+           "jnpt": "Nhava Sheva", "jawaharlal nehru port": "Nhava Sheva", "madras": "Chennai",
+           "kanchipuram": "Chennai", "oragadam": "Chennai", "irungattukottai": "Chennai"}
+NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+                "ten": 10, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30, "forty-eight": 48, "seventy-two": 72}
 STATES = ["Tamil Nadu", "Karnataka", "Maharashtra", "Haryana"]
 
 
@@ -97,17 +103,27 @@ def _find_suppliers(text: str, suppliers) -> list:
 
 def _duration(text: str, event_type: str) -> int:
     low = text.lower()
+    # "three days", "forty-eight hours" -> digits; longest words first so "forty-eight" beats "eight"
+    for word in sorted(NUMBER_WORDS, key=len, reverse=True):
+        low = re.sub(rf"\b{word}(?=[\s-]*(?:days?|hours?|hrs?|weeks?)\b)", str(NUMBER_WORDS[word]), low)
     m = re.search(r"(\d+)\s*(?:-|to)\s*(\d+)\s*days?", low)
     if m:
         return int(m.group(2))
     m = re.search(r"(\d+)\s*days?", low)
     if m:
         return int(m.group(1))
-    m = re.search(r"(\d+)[\s-]*hours?", low)
+    m = re.search(r"(\d+)[\s-]*(?:hours?|hrs?)\b", low)
     if m:
         return max(1, math.ceil(int(m.group(1)) / 24))
-    if "a week" in low or "one week" in low:
+    m = re.search(r"(\d+)\s*weeks?", low)
+    if m:
+        return 7 * int(m.group(1))
+    if "fortnight" in low:
+        return 14
+    if "a week" in low:
         return 7
+    if re.search(r"\ba day\b", low):
+        return 1
     if "indefinite" in low:
         return 10
     return DEFAULT_DAYS.get(event_type, 2)
