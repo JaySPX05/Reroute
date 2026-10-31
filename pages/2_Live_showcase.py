@@ -12,6 +12,22 @@ import streamlit as st
 from reroute import config, db, explain, llm, network
 
 st.set_page_config(page_title="Live showcase · ReRoute", layout="wide")
+st.markdown(
+    """<style>
+    [data-testid="stSidebarNav"]::before {
+        content: "TechTitans\\A ReRoute | Supply Chain Resilience Platform";
+        display: block;
+        white-space: pre-line;
+        margin: 0.5rem 1rem 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--secondary-background-color);
+        font-size: 1.15rem;
+        line-height: 1.55;
+        color: var(--text-color);
+    }
+    </style>""",
+    unsafe_allow_html=True,
+)
 
 STEPS = {
     "port": ("Day 1 · Port notice", "port_notice",
@@ -95,7 +111,6 @@ def show_kpis(net, slots):
 T = tables()
 
 # ------------------------------------------------------------------ sidebar
-st.sidebar.title("Live showcase")
 scenario = st.sidebar.selectbox("Disruption", list(SCENARIOS))
 speed = st.sidebar.slider("Seconds per agent message", 0.0, 2.0, 0.7, 0.1)
 start = st.sidebar.button("Start live simulation", type="primary")
@@ -114,6 +129,7 @@ st.sidebar.caption(f"Language model: {llm.status()}")
 
 # ------------------------------------------------------------------ layout
 st.title("ReRoute agent network")
+st.caption("Kaveri EV Motors · Supply Chain Resilience")
 st.caption("Signals in, decisions out: every message between agents is shown live and written to the audit log.")
 banner = st.empty()
 kpi_slots = [c.empty() for c in st.columns(5)]
