@@ -50,14 +50,15 @@ Source: `results/showcase_runs.md`
 Environment: SQLite (local)  
 Date: 2026-11-01.
 
-| Scenario | Messages | Autonomous actions | Human escalations |
-|---|---:|---:|---:|
-| Chennai port closure | 14 | 0 | 3 |
-| Li-ion tariff spike | 42 | 5 | 9 |
-| Tamil Nadu transport strike | 10 | 1 | 1 |
-| Chained disruption | 66 | 6 | 12 |
+| Scenario | Agent messages before approvals | Messages incl. approvals | Autonomous actions | Human escalations |
+|---|---:|---:|---:|---:|
+| Chennai port closure | 8 | 14 | 0 | 3 |
+| Li-ion tariff spike | 24 | 42 | 5 | 9 |
+| Tamil Nadu transport strike | 8 | 10 | 1 | 1 |
+| Chained disruption | 42 | 66 | 6 | 12 |
 
-The actual chained run produced 66 messages, 6 autonomous actions and 12 human escalations. The handbook's earlier figure of 42 messages for the chained run is outdated. The separate tariff showcase row above retains the value recorded in `showcase_runs.md`.
+On the slide, say "42 agent messages, 66 including the 12 human approvals" for the chained run. Both numbers are measured;
+see the note in `showcase_runs.md` for how they were checked.
 
 ## 5. Manual Baseline
 
