@@ -1,46 +1,109 @@
-# Slide 6 numbers
+# Slide 6 - Verified Project Metrics
 
-Rule: only measured numbers go on the slide. Every cell needs a source. Leave a cell blank rather than guess.
+## Measurement rule
 
-| Row on slide 6 | Manual baseline | ReRoute (measured) | Where it came from |
-|---|---|---|---|
-| Time to list affected orders | [from results/manual_baseline.md] | [median_ms_to_list_affected_orders in results/timing.csv] | stopwatch / `python -m scripts.measure_timing` |
-| Time to a ranked recovery plan | [from results/manual_baseline.md] | [median_ms_to_ranked_plan in results/timing.csv] | stopwatch / `python -m scripts.measure_timing` |
-| Disruptions correctly detected | n/a | [from results/eval_summary.md] | `python scripts/evaluate.py --signals data/heldout_signals.json --llm`, run once by the detection owner |
-| Delay avoided per disruption | n/a | [see table below] | `python -m scripts.compare_plans` |
-| Plans accepted by the planner | n/a | [X of Y verdicts, from results/planner_acceptance.md] | reviewer verdicts |
+Only measured results are reported. Unavailable measurements are explicitly marked as not measured.
 
-## Delay avoided per disruption (Balanced plan, measured)
+## 1. Planning Performance
 
-Source: `results/plan_comparison.csv`, produced by `python -m scripts.compare_plans` on data generated 2026-10-31.
+Source: `results/timing.csv`
+Command: `python -m scripts.measure_timing`
+Runs: 5 per scenario.
 
-| Scenario | Late order-days avoided |
+| Scenario | Time to list affected orders | Time to ranked recovery plan |
+|---|---:|---:|
+| Smelter flood (S20, 8 days) | 17.9 ms | 72.8 ms |
+| Chennai port closure (8 days) | 19.1 ms | 62.8 ms |
+| Li-ion tariff increase (10% to 35%) | 16.0 ms | 133.6 ms |
+
+These are ReRoute execution timings, not manual planning timings.
+
+## 2. Detection Evaluation
+
+Source: `results/eval_summary.md`
+Evaluation: Rules-based detection on 20 labelled signals.
+Generative AI Hub was not configured; LLM evaluation was skipped.
+
+| Metric | Measured result |
+|---|---:|
+| Relevant vs. not relevant | 95% correct |
+| Event type on real disruptions | 79% correct (11/14) |
+| Supplier matching precision | 88% |
+| Supplier matching recall | 82% |
+| Median time per signal | 1 ms |
+
+## 3. Delay Avoided Per Disruption
+
+Source: `results/plan_comparison.csv`
+Plan: Balanced.
+
+| Scenario | Delay avoided |
 |---|---|
-| Hosur flood | 5 of 7 |
-| Smelter flood (S20, 8 days) | 4 of 5 |
-| Pune fire | 5 of 14 |
-| Chennai port closed, 8 days | 6 of 6 |
-| Tariff (no delay; cost avoided instead) | Rs 31.61 lakh of Rs 224.57 lakh |
+| Hosur flood | 5 of 7 late order-days |
+| Smelter flood (S20, 8 days) | 4 of 5 late order-days |
+| Pune fire | 5 of 14 late order-days |
+| Chennai port closure | 6 of 6 late order-days |
+| Li-ion tariff increase | Rs 31.61 lakh of Rs 224.57 lakh in cost avoided |
 
-If the slide needs one average, state exactly how it was calculated (for example "mean of the four delay scenarios") and
-check it by hand before it goes on the slide.
+## 4. Live Showcase Results
 
-## Demo box on slide 6
+Source: `results/showcase_runs.md`
+Environment: SQLite (local)
+Date: 2026-11-01.
 
-The current box (a 5-day halt, 12 affected orders, shift 60% to Coimbatore, 4 days avoided) matches no output of the code.
-Replace it with one real scenario from the table above, for example the smelter flood:
-2 high-priority orders kept on time for Rs 1.28 lakh, 4 of 5 late order-days avoided.
-Check the scenario's supplier and order counts against `python scratch_walkthrough.py` before putting them on the slide.
+| Scenario | Messages | Autonomous actions | Human escalations |
+|---|---:|---:|---:|
+| Chennai port closure | 14 | 0 | 3 |
+| Li-ion tariff spike | 14 | 5 | 9 |
+| Tamil Nadu transport strike | 10 | 1 | 1 |
+| Chained disruption | 66 | 6 | 12 |
 
-## Footnote (edit so it is true)
+The chained run produced 66 messages. The handbook's earlier figure of 42 is outdated.
 
-"Synthetic test bed: 19 suppliers, 8 disruption scenarios, 20 held-out signals. Manual baseline: one participant, one scenario."
+## 5. Manual Baseline
 
-Check each part before using it:
-- 19 suppliers: `data/suppliers.csv` has 19 rows
-- 8 disruption scenarios: the number `scripts/evaluate.py` actually runs
-- 20 held-out signals: `data/heldout_signals.json` has 20 items
+Status: Not conducted.
 
-## Do not put on the slide
+Manual planning time, affected orders identified manually and manual recovery cost were not measured.
 
-Emissions savings, percentage gains from real companies, or any figure not listed above.
+A quantitative manual-versus-automated comparison is therefore unavailable.
+
+Source: `results/manual_baseline.md`.
+
+## 6. Planner Acceptance
+
+Status: Not conducted.
+
+Human reviewer acceptance and rejection verdicts have not been measured.
+
+Source: `results/planner_acceptance.md`.
+
+## 7. Demo Scenario
+
+Suggested measured example: Smelter flood (S20, 8 days).
+
+- 4 purchase orders changed.
+- Rs 1.28 lakh additional cost.
+- 4 of 5 late order-days avoided.
+- 2 of 2 high-priority customer orders kept on time.
+
+Source: `results/plan_comparison.csv`.
+
+Verify individual PO and supplier details against the application before presenting them.
+
+## 8. Limitations
+
+- The test data is synthetic.
+- The manual baseline was not conducted.
+- Human planner acceptance was not measured.
+- LLM-assisted detection was not evaluated because Generative AI Hub was not configured.
+- Showcase runs used SQLite local execution and offline explanation templates.
+
+## 9. Sources
+
+- `results/timing.csv`
+- `results/eval_summary.md`
+- `results/plan_comparison.csv`
+- `results/showcase_runs.md`
+- `results/manual_baseline.md`
+- `results/planner_acceptance.md`

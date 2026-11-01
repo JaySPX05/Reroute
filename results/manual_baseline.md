@@ -1,28 +1,23 @@
-# Manual baseline: how long a person takes without ReRoute
+# Manual Baseline Evaluation
 
-Scenario: smelter flood, supplier S20, 8 days (same one ReRoute is timed on).
-Participant: [name] (has not seen ReRoute's output for this scenario)
-Date: [____]
+## Status: Not conducted
 
-## Setup
+Scenario: Smelter flood, supplier S20, 8 days.
 
-The participant gets only the CSV files in `data/` (suppliers, supplier_links, supplier_materials, purchase_orders,
-sales_orders, materials, bom) opened in Excel. No ReRoute app, no code. Use a stopwatch.
-
-Task 1: list every purchase order and customer order the flood will make late.
-Task 2: choose a recovery action (wait, expedite or switch supplier) for each late purchase order and give the
-total extra cost.
+## Reason
+The independent manual planning experiment was not conducted within the available project submission timeline.
 
 ## Results
 
-| Measure | Time (mm:ss) | Notes |
-|---|---|---|
-| Time to list affected orders | | |
-| Time to a ranked recovery plan | | |
+| Measure | Result |
+|---|---|
+| Time to list affected orders | Not measured |
+| Time to prepare ranked recovery plan | Not measured |
+| Affected orders identified | Not measured |
+| Backup supplier dependency noticed | Not measured |
+| Manual recovery cost | Not measured |
 
-How many affected orders did the participant find? [__] of [__] (ReRoute: [__])
-Did the participant notice the backup supplier shares the smelter? [yes / no]
+## Limitation
+A direct quantitative comparison between manual planning and ReRoute could not be established.
 
-## Reporting
-
-One participant, one scenario. Say so in the slide 6 footnote.
+ReRoute execution timings are reported separately in results/timing.csv.
