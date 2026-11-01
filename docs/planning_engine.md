@@ -1,6 +1,6 @@
 # Planning engine: how ReRoute decides what to do
 
-Owner: [your name]
+Owner: Kavana  
 Files: `reroute/impact.py` (trace), `reroute/planner.py` (simulate and rank), `scripts/compare_plans.py` (results)
 
 All data is synthetic. SAP IBP is represented by `planner.py`.
@@ -41,9 +41,6 @@ Note that there are two different stocks: supplier `buffer_days` (rule 2) and pl
 
 ## 3. Why SO4501 is 2 days late (smelter flood, 8 days)
 
-> TO VERIFY: the numbers below come from the project handbook. Run `python scratch_walkthrough.py`
-> and correct this section if your output differs.
-
 1. The Tier-2 smelter (S20) is down 8 days.
 2. Tier-1 suppliers that buy from it are down: wheel maker 5 days, frame maker 3 days, Coimbatore backup 2 days (it buys 30% of its aluminium from the smelter, so its downtime is scaled down).
 3. PO 4500000007 (150 chassis frames) arrives 4 days late.
@@ -51,22 +48,22 @@ Note that there are two different stocks: supplier `buffer_days` (rule 2) and pl
 
 ## 4. Measured results
 
-Produced with `python -m scripts.compare_plans`. Data generated 2026-10-31, rule-based detection (`use_llm=False`), so the numbers are the same on every run.
+Produced with `python -m scripts.compare_plans`. Dataset snapshot date: 2026-10-29, according to `data/meta.csv`. Detection for this comparison is rule-based (`use_llm=False`).
 
 ### Balanced plan (the recommended plan)
 
 | Scenario | POs changed | Extra cost | Late order-days avoided | High-priority on time |
-|---|---|---|---|---|
+|---|---:|---:|---|---|
 | Hosur flood (news) | 10 | Rs 2.72 lakh | 5 of 7 | 3 of 3 |
 | Smelter flood (S20, 8 days) | 4 | Rs 1.28 lakh | 4 of 5 | 2 of 2 |
 | Pune fire (news) | 5 | Rs 3.92 lakh | 5 of 14 | 0 of 3 |
 | Chennai port closed, 8 days | 3 | Rs 7.96 lakh | 6 of 6 | 2 of 2 |
-| Li-ion tariff 10% to 35% | 14 | Rs 192.96 lakh total extra | cost avoided Rs 31.61 lakh of Rs 224.57 lakh | n/a |
+| Li-ion tariff 10% to 35% | 14 | Remaining duty cost Rs 192.96 lakh; Rs 31.61 lakh avoided | n/a | n/a |
 
 ### All three plans
 
 | Scenario | Plan | POs changed | Extra cost | Late order-days avoided | High-priority on time |
-|---|---|---|---|---|---|
+|---|---|---:|---:|---|---|
 | Smelter flood | Fastest recovery | 8 | Rs 2.18 lakh | 4 of 5 | 2 of 2 |
 | Smelter flood | Lowest cost | 0 | Rs 0 | 0 of 5 | 0 of 2 |
 | Smelter flood | Balanced | 4 | Rs 1.28 lakh | 4 of 5 | 2 of 2 |
@@ -76,26 +73,18 @@ Produced with `python -m scripts.compare_plans`. Data generated 2026-10-31, rule
 | Chennai port | Fastest recovery | 8 | Rs 30.33 lakh | 5 of 6 | 2 of 2 |
 | Chennai port | Lowest cost | 2 | Rs 2.77 lakh | 4 of 6 | 2 of 2 |
 | Chennai port | Balanced | 3 | Rs 7.96 lakh | 6 of 6 | 2 of 2 |
-| Li-ion tariff | all three plans | 14 | Rs 192.96 lakh | cost avoided Rs 31.61 lakh | n/a |
+| Li-ion tariff | All three plans | 14 | Remaining duty cost Rs 192.96 lakh; Rs 31.61 lakh avoided | n/a | n/a |
 
 ## 5. What the results show
 
 - **Smelter flood:** Balanced matches Fastest recovery on outcome (4 of 5 order-days, both high-priority orders on time) for Rs 1.28 lakh instead of Rs 2.18 lakh, with 4 POs changed instead of 8.
-
 - **Chennai port:** Balanced avoids all 6 late order-days for Rs 7.96 lakh. Fastest recovery spends Rs 30.33 lakh and avoids only 5. Why: Pune Battery Systems has 600 units of spare capacity for one week, shared by all late POs, and high-priority POs are planned first. Fastest switched high-priority PO 4500000029 (400 units) even though plant stock already absorbed its delay, which left too little capacity for Medium PO 4500000005 (300 units). That order was expedited instead and stayed 1 day late. Fastest also spent Rs 5.16 lakh expediting PO 4500000069 for a 1-day delay. The point: shared spare capacity means the order of planning matters.
-
 - **Chennai port, honest note:** Lowest cost also keeps both high-priority orders on time, for Rs 2.77 lakh. Balanced's extra Rs 5.19 lakh buys the Medium order, which takes the result from 4 of 6 to 6 of 6 order-days. Do not claim Balanced is needed to protect high-priority customers in this scenario.
+- **Pune fire:** No plan protects the 3 high-priority orders (0 of 3), because there is no quick alternative magnet source. Balanced still avoids 5 of 14 late order-days. The earlier we know, the more options exist.
+- **Tariff:** All three plans are identical. Pune Battery Systems has 2,400 units of spare capacity over the 4-week horizon (600 per week x 4), and the 14 switched orders use about 2,370 of them, so every plan hits the same limit and the weights make no difference. The other 26 orders wait and pay the higher duty. Remaining duty cost is Rs 192.96 lakh; cost avoided is Rs 31.61 lakh of Rs 224.57 lakh (about 14%).
+- **Hidden dependency:** The Coimbatore backup wheel maker buys part of its aluminium from the flooded smelter, so it is also slowed. ReRoute still uses it, just later. A view of direct suppliers alone would assume the backup is safe.
 
-- **Pune fire:** no plan protects the 3 high-priority orders (0 of 3), because there is no quick alternative magnet source. Balanced still avoids 5 of 14 late order-days. The earlier we know, the more options exist.
-
-- **Tariff:** all three plans are identical. Pune Battery Systems has 2,400 units of spare capacity over the 4-week horizon (600 per week x 4), and the 14 switched orders use about 2,370 of them, so every plan hits the same limit and the weights make no difference. The other 26 orders wait and pay the higher duty. Cost avoided is Rs 31.61 lakh of Rs 224.57 lakh (about 14%).
-
-- **Hidden dependency:** the Coimbatore backup wheel maker buys part of its aluminium from the flooded smelter, so it is also slowed. ReRoute still uses it, just later. A view of direct suppliers alone would assume the backup is safe.
-
-> Derivation notes: a switch to Pune Battery Systems costs Rs 1,730 per unit
-> (Rs 1,300 price difference plus 2% of Rs 21,500). Dividing each switch cost by 1,730 gives
-> the order quantities used above. The assumption to confirm is that Pune Battery Systems is
-> supplier S15 in `data/suppliers.csv` (600 units = 1,200 weekly capacity x 0.5 spare share).
+> Derivation notes: a switch to Pune Battery Systems costs Rs 1,730 per unit (Rs 1,300 price difference plus 2% of Rs 21,500). Dividing each switch cost by 1,730 gives the order quantities used above. The assumption to confirm is that Pune Battery Systems is supplier S15 in `data/suppliers.csv` (600 units = 1,200 weekly capacity x 0.5 spare share).
 
 ## 6. What we have not measured yet
 
