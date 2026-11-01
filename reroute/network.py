@@ -57,11 +57,8 @@ class AuditLog:
         self.last_hash, self.next_seq = "GENESIS", 1
         if persist:
             db.ensure_runtime_tables()
-            rows = db.read_rows("agent_audit_log")
-            if len(rows):
-                rows = rows.sort_values("seq")
-                self.last_hash = rows.iloc[-1]["hash"]
-                self.next_seq = int(rows.iloc[-1]["seq"]) + 1
+            last_seq, self.last_hash = db.audit_tail()
+            self.next_seq = last_seq + 1
 
     @staticmethod
     def digest(prev: str, rec: dict) -> str:
@@ -72,12 +69,29 @@ class AuditLog:
         details = json.dumps(msg.data, default=str)
         if len(details) > 4500:
             details = details[:4500] + "...(truncated)"
-        rec = {"seq": f"{self.next_seq:08d}", "ts": msg.ts, "run_id": self.run_id, "sender": msg.sender,
-               "recipient": msg.recipient, "kind": msg.kind, "summary": msg.summary[:1900], "details": details,
-               "prev_hash": self.last_hash}
-        rec["hash"] = self.digest(self.last_hash, rec)
-        if self.persist:
-            db.insert_row("agent_audit_log", rec)
+        for attempt in range(10):
+            if self.persist and attempt:
+                # another run (another laptop, or another viewer of the hosted app) wrote since we last looked:
+                # chain onto its latest record instead of forking the log
+                last_seq, self.last_hash = db.audit_tail()
+                self.next_seq = last_seq + 1
+            rec = {"seq": f"{self.next_seq:08d}", "ts": msg.ts, "run_id": self.run_id, "sender": msg.sender,
+                   "recipient": msg.recipient, "kind": msg.kind, "summary": msg.summary[:1900], "details": details,
+                   "prev_hash": self.last_hash}
+            rec["hash"] = self.digest(self.last_hash, rec)
+            if not self.persist:
+                break
+            last_seq, last_hash = db.audit_tail()
+            if last_seq != self.next_seq - 1 or last_hash != self.last_hash:
+                continue                      # stale view of the log: re-read and rebuild the record
+            try:
+                db.insert_row("agent_audit_log", rec)
+                break
+            except Exception:
+                if db.audit_tail()[0] < self.next_seq:
+                    raise                     # a real database error, not someone else taking our number
+        else:
+            raise RuntimeError("Audit log is too busy: 10 attempts to append were overtaken by other runs")
         self.records.append(rec)
         self.last_hash, self.next_seq = rec["hash"], self.next_seq + 1
         msg.seq, msg.hash = int(rec["seq"]), rec["hash"]

@@ -6,6 +6,8 @@ showcase doesn't open a new HANA connection for every agent message.
 """
 import csv
 import json
+import logging
+import os
 import sqlite3
 import threading
 from datetime import datetime
@@ -28,10 +30,23 @@ RUNTIME_DDL = {
 }
 
 _tl = threading.local()
+log = logging.getLogger("reroute.db")
 
 
 def backend() -> str:
     return "hana" if config.DB_BACKEND == "hana" else "sqlite"
+
+
+def _guard_reset(what: str) -> None:
+    """HANA is shared by the whole team, so never wipe it by accident.
+
+    SQLite is one person's local file, so it can always be reset.
+    """
+    if backend() == "hana" and os.getenv("REROUTE_ALLOW_RESET", "").lower() != "yes":
+        raise RuntimeError(
+            f"Refusing to {what} on SAP HANA Cloud: it is shared by the whole team, and this would delete the "
+            "supplier reports, approvals and audit log. If everyone agrees, run this one command with "
+            "REROUTE_ALLOW_RESET=yes set in the terminal (not in .env).")
 
 
 def connect():
@@ -121,7 +136,9 @@ def init_db(reset_runtime: bool = True) -> None:
     """Load every CSV from data/ into the database (re-creating the tables).
 
     reset_runtime=True also clears supplier reports, approvals and the audit log.
+    On SAP HANA Cloud this is refused unless REROUTE_ALLOW_RESET=yes (see _guard_reset).
     """
+    _guard_reset("re-create all tables")
     _reset_shared()
     conn = connect()
     cur = conn.cursor()
@@ -154,12 +171,43 @@ def ensure_runtime_tables(reset: bool = False) -> None:
         except Exception:
             conn.rollback() if backend() == "sqlite" else None
         if reset or (current is not None and current != cols):
+            if current is not None:
+                _guard_reset(f"clear the {table} table" if reset else
+                             f"re-create the {table} table (its columns changed)")
             _drop(cur, table)
             current = None
         if current is None:
             _create_runtime(cur, table)
+    _ensure_audit_seq_unique(conn)
     conn.commit()
     conn.close()
+
+
+def _ensure_audit_seq_unique(conn) -> None:
+    """A unique seq makes the database refuse a second record with the same number, so two runs
+    writing at once can never fork the audit chain (AuditLog.append retries instead)."""
+    cur = conn.cursor()
+    name, table, col = _q("agent_audit_log_seq"), _q("agent_audit_log"), _q("seq")
+    try:
+        if backend() == "sqlite":
+            cur.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {name} ON {table} ({col})")
+            return
+        cur.execute("SELECT COUNT(*) FROM INDEXES WHERE SCHEMA_NAME = CURRENT_SCHEMA AND INDEX_NAME = ?",
+                    ["AGENT_AUDIT_LOG_SEQ"])
+        if cur.fetchone()[0] == 0:
+            cur.execute(f"CREATE UNIQUE INDEX {name} ON {table} ({col})")
+    except Exception as e:  # e.g. old duplicate seq values: keep running, the retry still narrows the gap
+        log.warning("Could not make audit seq unique: %s", e)
+
+
+def audit_tail() -> tuple:
+    """(last seq number, last hash) of the stored audit log, read fresh; (0, 'GENESIS') if empty."""
+    def fetch(cur):
+        cur.execute(f"SELECT {_q('seq')}, {_q('hash')} FROM {_q('agent_audit_log')} "
+                    f"ORDER BY {_q('seq')} DESC LIMIT 1")
+        return cur.fetchone()
+    row = _run(fetch)
+    return (int(row[0]), row[1]) if row else (0, "GENESIS")
 
 
 def load_tables() -> dict:
