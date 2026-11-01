@@ -1,0 +1,4 @@
+scenario,median_ms_to_list_affected_orders,median_ms_to_ranked_plan,runs
+"Smelter flood (S20, 8 days)",13.0,54.2,5
+Chennai port closed (8 days),13.9,47.3,5
+Li-ion cell tariff 10% to 35%,13.1,102.4,5
