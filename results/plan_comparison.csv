@@ -1,0 +1,16 @@
+scenario,plan,pos_changed,extra_cost_lakh,cost_avoided_lakh,delay_avoided,high_priority_on_time
+Hosur flood (news),Fastest recovery,24,5.91,n/a,5 of 7,3 of 3
+Hosur flood (news),Lowest cost,5,0.77,n/a,1 of 7,1 of 3
+Hosur flood (news),Balanced,10,2.72,n/a,5 of 7,3 of 3
+"Smelter flood (S20, 8 days)",Fastest recovery,8,2.18,n/a,4 of 5,2 of 2
+"Smelter flood (S20, 8 days)",Lowest cost,0,0.0,n/a,0 of 5,0 of 2
+"Smelter flood (S20, 8 days)",Balanced,4,1.28,n/a,4 of 5,2 of 2
+Pune fire (news),Fastest recovery,8,6.41,n/a,5 of 14,0 of 3
+Pune fire (news),Lowest cost,0,0.0,n/a,0 of 14,0 of 3
+Pune fire (news),Balanced,5,3.92,n/a,5 of 14,0 of 3
+Chennai port closed (8 days),Fastest recovery,8,30.33,n/a,5 of 6,2 of 2
+Chennai port closed (8 days),Lowest cost,2,2.77,n/a,4 of 6,2 of 2
+Chennai port closed (8 days),Balanced,3,7.96,n/a,6 of 6,2 of 2
+Li-ion cell tariff 10% to 35%,Fastest recovery,14,192.96,31.61,0 of 0,0 of 0
+Li-ion cell tariff 10% to 35%,Lowest cost,14,192.96,31.61,0 of 0,0 of 0
+Li-ion cell tariff 10% to 35%,Balanced,14,192.96,31.61,0 of 0,0 of 0

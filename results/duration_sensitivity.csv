@@ -1,0 +1,16 @@
+days_down,suppliers_down,pos_late,plan,pos_changed,extra_cost_lakh,delay_avoided,high_priority_on_time
+3,2,2,Fastest recovery,1,0.39,0 of 0,0 of 0
+3,2,2,Lowest cost,0,0.0,0 of 0,0 of 0
+3,2,2,Balanced,0,0.0,0 of 0,0 of 0
+5,4,7,Fastest recovery,3,0.88,0 of 0,0 of 0
+5,4,7,Lowest cost,0,0.0,0 of 0,0 of 0
+5,4,7,Balanced,0,0.0,0 of 0,0 of 0
+8,4,14,Fastest recovery,8,2.18,4 of 5,2 of 2
+8,4,14,Lowest cost,0,0.0,0 of 5,0 of 2
+8,4,14,Balanced,4,1.28,4 of 5,2 of 2
+11,4,20,Fastest recovery,15,4.32,17 of 25,3 of 4
+11,4,20,Lowest cost,3,1.21,4 of 25,2 of 4
+11,4,20,Balanced,10,2.96,18 of 25,3 of 4
+14,4,27,Fastest recovery,22,7.17,33 of 64,1 of 4
+14,4,27,Lowest cost,6,1.5,20 of 64,1 of 4
+14,4,27,Balanced,12,4.06,28 of 64,1 of 4
