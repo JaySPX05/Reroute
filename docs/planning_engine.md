@@ -84,11 +84,15 @@ Produced with `python -m scripts.compare_plans`. Dataset snapshot date: 2026-10-
 - **Tariff:** All three plans are identical. Pune Battery Systems has 2,400 units of spare capacity over the 4-week horizon (600 per week x 4), and the 14 switched orders use about 2,370 of them, so every plan hits the same limit and the weights make no difference. The other 26 orders wait and pay the higher duty. Remaining duty cost is Rs 192.96 lakh; cost avoided is Rs 31.61 lakh of Rs 224.57 lakh (about 14%).
 - **Hidden dependency:** The Coimbatore backup wheel maker buys part of its aluminium from the flooded smelter, so it is also slowed. ReRoute still uses it, just later. A view of direct suppliers alone would assume the backup is safe.
 
-> Derivation notes: a switch to Pune Battery Systems costs Rs 1,730 per unit (Rs 1,300 price difference plus 2% of Rs 21,500). Dividing each switch cost by 1,730 gives the order quantities used above. The assumption to confirm is that Pune Battery Systems is supplier S15 in `data/suppliers.csv` (600 units = 1,200 weekly capacity x 0.5 spare share).
+> Derivation notes: a switch to Pune Battery Systems costs Rs 1,730 per unit (Rs 1,300 price difference plus 2% of Rs 21,500). Dividing each switch cost by 1,730 gives the order quantities used above. Pune Battery Systems is supplier S15 in `data/suppliers.csv`; its 600 units a week are 1,200 weekly capacity x 0.5 spare share in `data/supplier_materials.csv`.
 
 ## 6. What we have not measured yet
 
-Detection accuracy on unseen signals, the manual-planner baseline, and planner acceptance by reviewers.
+The manual-planner baseline and planner acceptance by reviewers.
+
+Detection on unseen signals is now measured (`python scripts/evaluate.py --signals data/heldout_signals.json`,
+rules only, 20 held-out signals): 95% relevant vs not relevant, 79% event type (11/14),
+supplier matching precision 88% and recall 82%. See `results/slide6_numbers.md`.
 
 ## 7. Likely judge questions
 
