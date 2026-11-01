@@ -110,13 +110,47 @@ def show_kpis(net, slots):
 
 T = tables()
 
+# ------------------------------------------------------------------ simulation state and controls
+SIM_STATE_DEFAULTS = {
+    "sim_status": "Ready",
+    "sim_started_at": None,
+    "sim_elapsed": 0.0,
+    "sim_scenario_keys": [],
+    "sim_scenario_index": 0,
+    "sim_message_iter": None,
+    "sim_current_label": "",
+}
+for state_key, default_value in SIM_STATE_DEFAULTS.items():
+    st.session_state.setdefault(state_key, default_value)
+
+
+def show_simulation_metrics(net, slots):
+    status = st.session_state.sim_status
+    started_at = st.session_state.sim_started_at
+    elapsed = (time.perf_counter() - started_at
+               if status == "Running" and started_at is not None
+               else st.session_state.sim_elapsed)
+    all_plans = ([plan for event in net.events.values() for plan in event.get("plans", [])]
+                 if net else [])
+    alternatives = sum(not plan.get("recommended", False) for plan in all_plans)
+    recommended = any(plan.get("recommended", False) for plan in all_plans)
+    slots[0].metric("Total elapsed time", f"{elapsed:.1f} s")
+    slots[1].metric("Alternative plans generated", alternatives)
+    slots[2].metric("Recommended plan", "Available" if recommended else "Not available")
+    slots[3].metric("Simulation status", status)
+
+
 # ------------------------------------------------------------------ sidebar
 scenario = st.sidebar.selectbox("Disruption", list(SCENARIOS))
 speed = st.sidebar.slider("Seconds per agent message", 0.0, 2.0, 0.7, 0.1)
-start = st.sidebar.button("Start live simulation", type="primary")
+start = st.sidebar.button("Start Simulation", type="primary",
+                          disabled=st.session_state.sim_status == "Running")
+stop = st.sidebar.button("Stop Simulation", disabled=st.session_state.sim_status != "Running")
+if st.session_state.sim_status == "Stopped":
+    st.sidebar.caption("Starting again creates a new run; the stopped run will not resume.")
 if st.sidebar.button("Reset"):
-    for k in ["net", "feed", "last"]:
-        st.session_state.pop(k, None)
+    for state_key in ["net", "feed", "last", *SIM_STATE_DEFAULTS]:
+        st.session_state.pop(state_key, None)
     st.rerun()
 st.sidebar.divider()
 st.sidebar.caption("Autonomy limits (Policy agent)")
@@ -127,12 +161,37 @@ st.sidebar.divider()
 st.sidebar.caption(f"Database: {'SAP HANA Cloud' if db.backend() == 'hana' else 'SQLite (local)'}")
 st.sidebar.caption(f"Language model: {llm.status()}")
 
+if start:
+    net = network.Network(T)
+    st.session_state.net = net
+    st.session_state.feed = []
+    st.session_state.last = None
+    st.session_state.sim_scenario_keys = list(SCENARIOS[scenario])
+    st.session_state.sim_scenario_index = 0
+    st.session_state.sim_message_iter = None
+    st.session_state.sim_current_label = ""
+    st.session_state.sim_started_at = time.perf_counter()
+    st.session_state.sim_elapsed = 0.0
+    st.session_state.sim_status = "Running"
+
+if stop and st.session_state.sim_status == "Running":
+    started_at = st.session_state.sim_started_at
+    st.session_state.sim_elapsed = (time.perf_counter() - started_at) if started_at is not None else 0.0
+    st.session_state.sim_status = "Stopped"
+    st.session_state.sim_message_iter = None
+    st.session_state.last = None
+
 # ------------------------------------------------------------------ layout
 st.title("ReRoute agent network")
 st.caption("Kaveri EV Motors · Supply Chain Resilience")
 st.caption("Signals in, decisions out: every message between agents is shown live and written to the audit log.")
 banner = st.empty()
-kpi_slots = [c.empty() for c in st.columns(5)]
+with st.container(border=True):
+    st.markdown("#### Simulation Summary")
+    performance_slots = [c.empty() for c in st.columns(4, gap="small", border=True)]
+    st.divider()
+    st.markdown("#### Agent Metrics")
+    kpi_slots = [c.empty() for c in st.columns(5, gap="small", border=True)]
 left, right = st.columns([4, 8])
 with left:
     st.subheader("Agents")
@@ -141,37 +200,71 @@ with right:
     st.subheader("Live message feed")
     feed_slot = st.empty()
 
-# ------------------------------------------------------------------ live run
-if start:
-    net = network.Network(T)
-    st.session_state.net, st.session_state.feed, st.session_state.last = net, [], None
-    for key in SCENARIOS[scenario]:
-        label, source, text = STEPS[key]
-        banner.info(f"**{label}:** {text}")
-        net.inject(text, source, label)
-        for m in net.run():
-            st.session_state.feed.append(m)
-            st.session_state.last = (m.sender, m.recipient)
-            show_graph(graph_slot, st.session_state.last)
-            show_feed(feed_slot, st.session_state.feed)
-            show_kpis(net, kpi_slots)
-            if speed:
-                time.sleep(speed)
-    st.session_state.last = None
-
+# ------------------------------------------------------------------ advance one safe agent-message boundary per rerun
 net = st.session_state.get("net")
+processed_message = False
+if net and st.session_state.sim_status == "Running":
+    while st.session_state.sim_status == "Running":
+        scenario_index = st.session_state.sim_scenario_index
+        scenario_keys = st.session_state.sim_scenario_keys
+        if scenario_index >= len(scenario_keys):
+            started_at = st.session_state.sim_started_at
+            st.session_state.sim_elapsed = (time.perf_counter() - started_at
+                                             if started_at is not None else 0.0)
+            st.session_state.sim_status = "Awaiting Approval"
+            st.session_state.sim_message_iter = None
+            st.session_state.last = None
+            break
+
+        message_iter = st.session_state.sim_message_iter
+        if message_iter is None:
+            step_key = scenario_keys[scenario_index]
+            label, source, signal_text = STEPS[step_key]
+            st.session_state.sim_current_label = label
+            banner.info(f"**{label}:** {signal_text}")
+            net.inject(signal_text, source, label)
+            message_iter = iter(net.run())
+            st.session_state.sim_message_iter = message_iter
+
+        try:
+            message = next(message_iter)
+        except StopIteration:
+            st.session_state.sim_message_iter = None
+            st.session_state.sim_scenario_index = scenario_index + 1
+            continue
+
+        st.session_state.feed.append(message)
+        st.session_state.last = (message.sender, message.recipient)
+        processed_message = True
+        break
+
+show_simulation_metrics(net, performance_slots)
+
 if not net:
-    banner.info("Pick a disruption in the sidebar and press **Start live simulation**.")
+    banner.info("Pick a disruption in the sidebar and press **Start Simulation**.")
     show_graph(graph_slot)
     st.stop()
 
 show_graph(graph_slot, st.session_state.get("last"))
 show_feed(feed_slot, st.session_state.feed)
 show_kpis(net, kpi_slots)
-banner.success(f"Run {net.run_id}: the network is quiet. "
-               + (f"{len(net.pending)} actions are waiting for your decision below." if net.pending
-                  else "Nothing is waiting for you."))
 
+status = st.session_state.sim_status
+if status == "Running":
+    banner.info(f"Running: {st.session_state.sim_current_label}")
+elif status == "Stopped":
+    banner.warning(f"Run {net.run_id} stopped. Generated messages, plans and audit entries are preserved.")
+elif status == "Awaiting Approval":
+    banner.success(f"Run {net.run_id}: workflow complete; awaiting Human Planner approval. "
+                   + (f"{len(net.pending)} actions are waiting for your decision below."
+                      if net.pending else "No actions are waiting for approval."))
+else:
+    banner.info("Simulation is ready to start.")
+
+if status == "Running":
+    if speed and processed_message:
+        time.sleep(speed)
+    st.rerun()
 
 def settle():
     """After a human decision, let Execution and Audit finish, then refresh."""
