@@ -5,3 +5,4 @@ uvicorn>=0.27
 python-dotenv>=1.0
 requests>=2.31
 pytest>=8.0
+hdbcli             # SAP HANA Cloud driver; needed by the hosted app (Streamlit Cloud installs only this file)
