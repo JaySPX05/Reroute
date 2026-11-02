@@ -21,15 +21,20 @@ Across these tested scenarios, ranked-plan execution was under 0.2 seconds. Exec
 ## 2. Detection Evaluation
 
 Source: `results/eval_summary.md`  
-Evaluation: Rules-based detection on 20 labelled signals. Generative AI Hub was not configured; LLM evaluation was skipped.
+Command: `python scripts/evaluate.py --signals data/heldout_signals.json --llm` (run once, 2 Nov 2026)  
+Evaluation: 20 held-out labelled signals (14 real disruptions, 6 irrelevant), written without seeing the detection rules and never used for tuning. Generative AI Hub model: gpt-4o-mini via orchestration.
 
-| Metric | Measured result |
-|---|---:|
-| Relevant vs. not relevant | 95% correct |
-| Event type on real disruptions | 79% correct (11/14) |
-| Supplier matching precision | 88% |
-| Supplier matching recall | 82% |
-| Median time per signal | 1 ms |
+| Metric | Generative AI Hub | Keyword rules (offline fallback) |
+|---|---:|---:|
+| Relevant vs. not relevant | 100% correct | 95% correct |
+| Event type on real disruptions | 93% correct (13/14) | 79% correct (11/14) |
+| Supplier matching precision | 97% | 88% |
+| Supplier matching recall | 100% | 82% |
+| Median time per signal | 2,288 ms | 3 ms |
+
+On the slide: "Disruptions correctly detected: 13 of 14 event types, 100% of affected suppliers found (Generative AI Hub, 20 held-out signals)."
+
+For contrast, on the 26 practice signals the rules were tuned on (`python scripts/evaluate.py --llm`), the rules score 100% and the model 84% on event type. That is why the held-out score is the one reported.
 
 ## 3. Delay Avoided Per Disruption
 
@@ -92,7 +97,7 @@ Source: `results/plan_comparison.csv`.
 - The test data is synthetic.
 - The manual baseline was not conducted.
 - Human planner acceptance was not measured.
-- LLM-assisted detection was not evaluated because Generative AI Hub was not configured.
+- Detection was scored on 20 held-out signals, a small sample.
 - Showcase runs used SQLite local execution and offline explanation templates.
 
 ## 9. Sources
