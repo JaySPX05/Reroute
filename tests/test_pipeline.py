@@ -111,3 +111,16 @@ def test_facts_give_totals_beyond_the_listed_changes():
     acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
     assert bal["units_switched"] == int(acts[acts["action"] == "switch"]["qty"].sum())
     assert bal["changes_total"] >= len(bal["changes"])
+
+
+def test_capacity_note_names_who_booked_the_backup_and_only_when_it_mattered():
+    res = agent.analyze_text("Chennai Port Authority: all container terminal operations suspended for 8 days.", T)
+    acts = next(p for p in res["plans"] if p["name"] == "Fastest recovery")["actions"].set_index("po_id")
+    note = acts.loc[4500000005, "capacity_note"]
+    assert "Pune Battery Systems" in note and "only 40 spare left" in note
+    assert all(f"PO {po}" in note for po in (4500000013, 4500000021, 4500000029))
+    # an order the plan would not switch even with unlimited room gets no capacity note
+    res = agent.analyze_text("Heavy rain floods SIPCOT industrial estate in Hosur; units halted for 4-5 days.", T)
+    acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
+    covered = acts[(acts["action"] == "wait") & (acts["so_late_after"] == 0)]
+    assert len(covered) and (covered["capacity_note"] == "").all()

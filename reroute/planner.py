@@ -84,7 +84,7 @@ def _score(opt, po, w):
     return w["cost"] * cost + w["delay"] * delay + w["service"] * service
 
 
-def _capacity_note(po, sm, spare, booked, sup_names) -> str:
+def _capacity_note(po, sm, spare, booked, sup_names, only: str = "") -> str:
     """Why an alternate supplier could NOT take this PO: not enough spare capacity left.
 
     Names the earlier POs that booked the rest, so the planner sees the plans don't clash.
@@ -92,6 +92,8 @@ def _capacity_note(po, sm, spare, booked, sup_names) -> str:
     alts = sm[(sm["material_id"] == po.material_id) & (sm["supplier_id"] != po.supplier_id)]
     notes = []
     for a in alts.itertuples():
+        if only and a.supplier_id != only:
+            continue
         left = spare.get((a.supplier_id, po.material_id), 0)
         if left >= po.qty:
             continue
@@ -130,7 +132,11 @@ def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
     for po in pos.itertuples():
         opts = _options(po, today, tables, down_days, spare)
         best = min(opts, key=lambda o: (_score(o, po, weights), o["extra_cost"]))
-        note = _capacity_note(po, sm, spare, booked, sup_names)
+        # only blame capacity when it changed the decision: with unlimited spare, would we switch to a full supplier?
+        free = _options(po, today, tables, down_days, {k: float("inf") for k in spare})
+        ideal = min(free, key=lambda o: (_score(o, po, weights), o["extra_cost"]))
+        note = (_capacity_note(po, sm, spare, booked, sup_names, only=ideal["alt_supplier_id"])
+                if ideal["action"] == "switch" and best["alt_supplier_id"] != ideal["alt_supplier_id"] else "")
         if best["action"] == "switch":
             spare[(best["alt_supplier_id"], po.material_id)] -= po.qty
             booked.setdefault((best["alt_supplier_id"], po.material_id), []).append((po.po_id, int(po.qty)))
