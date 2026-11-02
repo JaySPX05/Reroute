@@ -47,7 +47,10 @@ def facts(impact: dict, plans: list) -> dict:
         "event": {"type": e.event_type, "source": e.source, "text": e.text, "location": e.location,
                   "expected_days": e.duration_days, "severity_1_to_5": e.severity,
                   "cost_pct": getattr(e, "cost_pct", 0.0), "materials": getattr(e, "material_ids", [])},
-        "summary": impact["summary"],
+        # Tier-1 count given outright so the model quotes it instead of subtracting
+        "summary": {**impact["summary"], **({"tier1_down": impact["summary"]["suppliers_down"]
+                                               - impact["summary"]["tier2_plus_down"]}
+                                            if "tier2_plus_down" in impact["summary"] else {})},
         "suppliers_down": impact["down"].to_dict("records"),
         "late_sales_orders": impact["sales_orders"][["sales_order_id", "customer", "product", "qty", "due_date",
                                                      "priority", "late_days"]].head(15).to_dict("records"),
