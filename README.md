@@ -66,6 +66,14 @@ One public link for the dashboard, the live showcase and the phone supplier form
    HANA_USER = "..."
    HANA_PASSWORD = "..."
    HANA_SCHEMA = "HACKFEST0294"
+   # SAP Generative AI Hub (values from the SAP AI Core service key)
+   AICORE_CLIENT_ID = "..."
+   AICORE_CLIENT_SECRET = "..."
+   AICORE_AUTH_URL = "..."
+   AICORE_BASE_URL = "..."        # the key's AI_API_URL with /v2 added
+   AICORE_RESOURCE_GROUP = "default"
+   ORCHESTRATION_URL = "..."      # AI Launchpad > Deployments > orchestration > Deployment URL
+   LLM_MODEL = "anthropic--claude-4.5-haiku"
    ```
    Streamlit passes these to the app as environment variables, which is what `reroute/config.py` reads.
 3. Deploy. Suppliers open `<your-app>.streamlit.app/Supplier_report` on any phone.
