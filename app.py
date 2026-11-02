@@ -72,7 +72,7 @@ elif mode == "Paste news or IMD alert":
         st.session_state.pop("approved_plan_name", None)
         run = True
 else:
-    reports = db.supplier_reports()          # cleared reports are hidden but kept in the database
+    reports = db.supplier_reports()          # resolved reports are hidden but kept in the database
     if reports.empty:
         st.sidebar.info("No open supplier reports. Open the Supplier report page to send one.")
     else:
@@ -92,15 +92,15 @@ else:
         chosen = reports.iloc[i].to_dict()
         if chosen.get("note"):
             st.sidebar.caption(f"Note: {chosen['note']}")
-        b1, b2 = st.sidebar.columns(2)
-        if b1.button("Analyse", type="primary"):
+        if st.sidebar.button("Analyse", type="primary"):
             st.session_state.result = agent.analyze_report(
                 {k: chosen[k] for k in ["supplier_id", "issue_type", "days_down", "note"]}, T, save=False)
             st.session_state.pop("approved_plan_name", None)
             run = True
-        if b2.button("Clear", help="Hide this report from the dashboard once it's dealt with. It stays in the database."):
+        if st.sidebar.button("Mark as resolved",
+                             help="Hide this report from the dashboard once it's dealt with. It stays in the database."):
             db.clear_supplier_report(chosen)
-            st.toast(f"Cleared: {label(i)}")
+            st.toast(f"Marked as resolved: {label(i)}")
             st.rerun()
 if run:
     st.session_state.chat = []
@@ -166,7 +166,8 @@ def show_received_supplier_reports(collapsed: bool = False):
     """
     reports = db.supplier_reports()
     n_cleared = len(db.supplier_reports(include_cleared=True)) - len(reports)
-    note = f"{n_cleared} cleared report{'s' if n_cleared != 1 else ''} hidden; still stored in the database." if n_cleared else ""
+    note = (f"{n_cleared} resolved report{'s' if n_cleared != 1 else ''} hidden; still stored in the database."
+            if n_cleared else "")
     if collapsed:
         with st.expander(f"Received supplier reports ({len(reports)})", expanded=False):
             _reports_table(reports)
