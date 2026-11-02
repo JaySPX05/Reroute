@@ -10,7 +10,11 @@ import logging
 import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Indian Standard Time, so a hosted server (which runs on UTC) records the same times as our laptops.
+# A fixed offset needs no time-zone database (Windows has none by default), and India has no daylight saving.
+IST = timezone(timedelta(hours=5, minutes=30))
 
 import pandas as pd
 
@@ -255,4 +259,5 @@ def read_rows(table: str) -> pd.DataFrame:
 
 
 def now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    """Current Indian time as 'YYYY-MM-DDTHH:MM:SS', in the same format as the records already stored."""
+    return datetime.now(IST).replace(tzinfo=None).isoformat(timespec="seconds")

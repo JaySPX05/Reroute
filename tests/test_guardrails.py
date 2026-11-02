@@ -60,3 +60,11 @@ def test_hana_reset_is_refused_without_explicit_permission(monkeypatch):
     monkeypatch.delenv("REROUTE_ALLOW_RESET", raising=False)
     with pytest.raises(RuntimeError, match="Refusing"):
         db.init_db()  # refused before any connection is opened, so no HANA account is needed
+
+
+def test_timestamps_are_indian_time_even_on_a_utc_server():
+    from datetime import datetime, timedelta, timezone
+    expected = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    got = datetime.fromisoformat(db.now())
+    assert got.tzinfo is None                                    # same format as stored records
+    assert abs((got - expected.replace(tzinfo=None)).total_seconds()) < 5
