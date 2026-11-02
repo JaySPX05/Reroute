@@ -18,7 +18,9 @@ summary.as_of. Do not say an order is already late unless the facts say so.
 Money is given as text such as "Rs 2.72 lakh" or "Rs 1.36 crore". Copy it exactly; never convert it to
 other units (no million, no thousands) and never write a rupee amount that isn't in the facts.
 In plan totals, high_priority_still_late counts only high-priority orders; sales_orders_late_after counts
-orders of every priority.
+orders of every priority. customer_orders_late_after_plan gives each order still late after that plan and by
+how many days. A plan's "changes" list shows at most 12 changes: for totals use changes_total and
+units_switched, never add up the list.
 If the facts do not answer the question, say what is missing.
 Write short, plain sentences a busy planner can act on. The planner makes the final decision."""
 
@@ -46,8 +48,17 @@ def facts(impact: dict, plans: list) -> dict:
     }
     for p in plans:
         acts = p["actions"]
+        changed = acts[acts["action"] != "wait"] if len(acts) else acts
+        switched = changed[changed["action"] == "switch"] if len(changed) else changed
+        late_after = (acts[acts["so_late_after"] > 0].groupby("sales_order_id")["so_late_after"].max()
+                      if len(acts) and "so_late_after" in acts else {})
         out["plans"].append({
             "name": p["name"], "recommended": p.get("recommended", False), "totals": p["totals"],
+            # totals over ALL changes, computed here, because "changes" below lists at most 12
+            "changes_total": int(len(changed)),
+            "units_switched": int(switched["qty"].sum()) if len(switched) else 0,
+            "customer_orders_late_after_plan": [{"sales_order_id": k, "late_days": int(v)}
+                                                for k, v in dict(late_after).items()],
             "changes": acts[acts["action"] != "wait"][["po_id", "material", "qty", "from_supplier", "action",
                                                      "to_supplier", "delay_before", "delay_after",
                                                      "extra_cost"]].head(12).to_dict("records") if len(acts) else [],
