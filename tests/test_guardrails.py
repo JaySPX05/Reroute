@@ -78,3 +78,17 @@ def test_clearing_a_report_hides_it_but_keeps_it(fresh_db):
     db.clear_supplier_report(target)
     assert list(db.supplier_reports()["supplier_id"]) == ["S20"]                     # hidden from the dashboard
     assert set(db.supplier_reports(include_cleared=True)["supplier_id"]) == {"S14", "S20"}  # still stored
+
+
+def test_resolving_works_even_if_the_new_table_was_never_created(fresh_db):
+    # Streamlit Cloud reloads code without restarting, so start-up table creation may not have run
+    import sqlite3
+    from reroute import agent
+    agent.analyze_report({"supplier_id": "S20", "issue_type": "flood", "days_down": 8, "note": ""}, fresh_db, save=True)
+    conn = sqlite3.connect(config.SQLITE_PATH)
+    conn.execute('DROP TABLE "cleared_reports"')
+    conn.commit()
+    conn.close()
+    db._reset_shared()
+    db.clear_supplier_report(db.supplier_reports().iloc[0].to_dict())
+    assert db.supplier_reports().empty and len(db.supplier_reports(include_cleared=True)) == 1

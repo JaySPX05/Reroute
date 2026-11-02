@@ -284,7 +284,23 @@ def supplier_reports(include_cleared: bool = False) -> pd.DataFrame:
     return reports[~_report_key(reports).isin(set(_report_key(cleared)))]
 
 
+def _ensure_table(table: str) -> None:
+    """Create one runtime table if it's missing. Only ever creates, never drops.
+
+    The app creates its tables once at start-up, but Streamlit Cloud reloads new code without restarting,
+    so a table added in an update may not exist yet on the hosted app.
+    """
+    try:
+        _run(lambda cur: cur.execute(f"SELECT * FROM {_q(table)} WHERE 1 = 0"))
+    except Exception:
+        conn = connect()
+        _create_runtime(conn.cursor(), table)
+        conn.commit()
+        conn.close()
+
+
 def clear_supplier_report(report: dict) -> None:
-    """Hide one report from the dashboard. The report itself is kept."""
+    """Hide one report from the dashboard (Mark as resolved). The report itself is kept."""
+    _ensure_table("cleared_reports")
     insert_row("cleared_reports", {"report_id": report["report_id"], "created_at": report["created_at"],
                                    "supplier_id": report["supplier_id"], "cleared_at": now()})
