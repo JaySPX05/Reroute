@@ -15,7 +15,11 @@ Each late sales order is one record: take its sales_order_id, customer, due_date
 same record and never combine fields from different records.
 late_days and delay figures are forecasts of how late things will be if nothing is done, counted from
 summary.as_of. Do not say an order is already late unless the facts say so.
-If the facts do not answer the question, say what is missing. Amounts are in Indian rupees (Rs).
+Money is given as text such as "Rs 2.72 lakh" or "Rs 1.36 crore". Copy it exactly; never convert it to
+other units (no million, no thousands) and never write a rupee amount that isn't in the facts.
+In plan totals, high_priority_still_late counts only high-priority orders; sales_orders_late_after counts
+orders of every priority.
+If the facts do not answer the question, say what is missing.
 Write short, plain sentences a busy planner can act on. The planner makes the final decision."""
 
 
@@ -51,13 +55,43 @@ def facts(impact: dict, plans: list) -> dict:
     return out
 
 
+MONEY = {"po_value_at_risk", "cost_increase_if_wait", "extra_cost", "cost_if_wait", "cost_avoided"}
+
+
+def for_model(f: dict) -> dict:
+    """The facts as the language model sees them: every amount of money already written as "Rs ... lakh/crore"
+    (so the model never converts units), cost fields dropped for delay events (where they are 0 or negative
+    and only confuse), and high-priority orders still late spelled out instead of left to the model."""
+    delay = f["summary"].get("kind") != "cost"
+
+    def money(d: dict) -> dict:
+        out = {}
+        for k, v in d.items():
+            if k in MONEY:
+                if delay and k != "extra_cost" and k != "po_value_at_risk":
+                    continue
+                out[k] = inr(v)
+            else:
+                out[k] = v
+        return out
+
+    g = dict(f)
+    g["summary"] = money(f["summary"])
+    g["plans"] = []
+    for p in f["plans"]:
+        t = money(p["totals"])
+        t["high_priority_still_late"] = p["totals"]["high_priority_affected"] - p["totals"]["high_priority_protected"]
+        g["plans"].append({**p, "totals": t, "changes": [money(c) for c in p["changes"]]})
+    return g
+
+
 def explain_plans(impact: dict, plans: list) -> tuple:
     """Returns (text, method)."""
     f = facts(impact, plans)
     if impact["summary"]["pos_at_risk"] == 0:
         return "No open purchase orders are at risk from this event. No action is needed; ReRoute will keep watching.", "template"
     msg = [{"role": "system", "content": SYSTEM},
-           {"role": "user", "content": "Facts:\n" + json.dumps(f, default=str) +
+           {"role": "user", "content": "Facts:\n" + json.dumps(for_model(f), default=str) +
             "\n\nIn under 150 words: what happened, what is at risk, then compare the three plans in one line each "
             "and say why the recommended plan is the best trade-off. End with one line on what the planner should check before approving."}]
     text = llm.chat(msg)
@@ -97,7 +131,7 @@ def _template(f: dict) -> str:
 
 def answer(question: str, impact: dict, plans: list, history: list | None = None) -> tuple:
     f = facts(impact, plans)
-    msgs = [{"role": "system", "content": SYSTEM + "\nFacts:\n" + json.dumps(f, default=str)}]
+    msgs = [{"role": "system", "content": SYSTEM + "\nFacts:\n" + json.dumps(for_model(f), default=str)}]
     msgs += (history or [])[-6:]
     msgs.append({"role": "user", "content": question})
     text = llm.chat(msgs)
