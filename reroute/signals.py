@@ -221,13 +221,23 @@ def classify_text(text: str, tables, source: str = "news", use_llm: bool = True)
     return Event(event_id=_new_id(), source=source, text=text, method=method, **{k: result[k] for k in keys})
 
 
+def report_severity(days_down: int) -> int:
+    """Severity of a supplier report, from how long the supplier says it will be down.
+
+    1 day -> 2, 2-3 days -> 3, 4-7 days -> 4, 8+ days -> 5 (the same 2-5 range news signals use).
+    Shown to the planner and given to the explanation; the planner's numbers don't depend on it.
+    """
+    return 2 if days_down <= 1 else 3 if days_down <= 3 else 4 if days_down <= 7 else 5
+
+
 def event_from_report(report: dict, tables) -> Event:
     """A supplier told us directly (mobile form / API): no guessing needed."""
     s = tables["suppliers"].set_index("supplier_id").loc[report["supplier_id"]]
     text = f'{s["name"]} reports {report["issue_type"]}: {report.get("note", "")}'.strip()
     issue = report["issue_type"] if report["issue_type"] in EVENT_TYPES else "equipment"
+    days = int(report["days_down"])
     return Event(event_id=_new_id(), source="supplier_report", text=text, relevant=True, event_type=issue,
-                 severity=4, duration_days=int(report["days_down"]), location=s["city"], state=s["state"],
+                 severity=report_severity(days), duration_days=days, location=s["city"], state=s["state"],
                  scope="site", supplier_ids=[report["supplier_id"]], confidence=1.0, method="report")
 
 

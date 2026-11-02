@@ -86,3 +86,9 @@ def test_agent_network_autonomy_approval_and_audit():
     assert network.verify_audit(rows)["ok"]
     rows.loc[rows.index[3], "summary"] = "edited"
     assert not network.verify_audit(rows)["ok"]
+
+
+def test_report_severity_follows_days_down():
+    sev = {d: signals.event_from_report({"supplier_id": "S20", "issue_type": "flood", "days_down": d, "note": ""}, T).severity
+           for d in [1, 2, 3, 4, 7, 8, 14]}
+    assert sev == {1: 2, 2: 3, 3: 3, 4: 4, 7: 4, 8: 5, 14: 5}
