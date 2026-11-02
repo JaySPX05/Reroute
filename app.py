@@ -471,6 +471,11 @@ with tab_plan:
                     st.dataframe(acts[acts["action"] != "wait"][["po_id", "so_priority", "material", "qty", "from_supplier",
                                                                   "action", "to_supplier", "delay_before", "delay_after",
                                                                   "extra_cost"]], hide_index=True, width="stretch")
+                limits = acts[acts["capacity_note"] != ""] if "capacity_note" in acts else acts.iloc[0:0]
+                if len(limits):
+                    st.markdown("**Capacity limits** (spare capacity is shared, so plans never promise the same parts twice)")
+                    for r in limits.itertuples():
+                        st.caption(f"PO {r.po_id}: {r.capacity_note}")
 
 with tab_impact:
     st.subheader("Suppliers down")

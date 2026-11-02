@@ -84,6 +84,25 @@ def _score(opt, po, w):
     return w["cost"] * cost + w["delay"] * delay + w["service"] * service
 
 
+def _capacity_note(po, sm, spare, booked, sup_names) -> str:
+    """Why an alternate supplier could NOT take this PO: not enough spare capacity left.
+
+    Names the earlier POs that booked the rest, so the planner sees the plans don't clash.
+    """
+    alts = sm[(sm["material_id"] == po.material_id) & (sm["supplier_id"] != po.supplier_id)]
+    notes = []
+    for a in alts.itertuples():
+        left = spare.get((a.supplier_id, po.material_id), 0)
+        if left >= po.qty:
+            continue
+        taken = booked.get((a.supplier_id, po.material_id), [])
+        why = f"Not switched to {sup_names.get(a.supplier_id, a.supplier_id)}: needs {int(po.qty)}, only {int(left)} spare left"
+        if taken:
+            why += " (" + ", ".join(f"{q} booked for PO {pid}" for pid, q in taken) + ")"
+        notes.append(why + ".")
+    return " ".join(notes)
+
+
 def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
     today = as_of(tables)
     pos = impact["pos"].copy()
@@ -106,12 +125,15 @@ def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
         pos = pos.sort_values(["prio_rank", "due", "po_id"])
 
     sup_names = tables["suppliers"].set_index("supplier_id")["name"]
+    booked = {}   # (supplier_id, material_id) -> [(po_id, qty)] already given to earlier POs in this plan
     chosen = []
     for po in pos.itertuples():
         opts = _options(po, today, tables, down_days, spare)
         best = min(opts, key=lambda o: (_score(o, po, weights), o["extra_cost"]))
+        note = _capacity_note(po, sm, spare, booked, sup_names)
         if best["action"] == "switch":
             spare[(best["alt_supplier_id"], po.material_id)] -= po.qty
+            booked.setdefault((best["alt_supplier_id"], po.material_id), []).append((po.po_id, int(po.qty)))
         chosen.append({
             "po_id": po.po_id, "sales_order_id": po.for_sales_order_id, "so_priority": po.so_priority,
             "material": po.material, "qty": int(po.qty), "from_supplier": po.supplier,
@@ -120,6 +142,7 @@ def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
             "delay_before": int(po.delay_days), "delay_after": best["delay_days"],
             "so_late_after": best["so_late_days"], "extra_cost": best["extra_cost"],
             "value": float(po.value), "options_considered": len(opts),
+            "capacity_note": note,
         })
     actions = pd.DataFrame(chosen)
     return {"name": name, "actions": actions, "totals": _totals(impact, actions)}
