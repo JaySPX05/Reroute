@@ -16,10 +16,21 @@ import pandas as pd
 
 from . import config
 from .impact import PRIORITY_WEIGHT, as_of
+from .signals import haversine_km
 
 EXPEDITE_SAVES_DAYS = 1
 EXPEDITE_COST_SHARE = 0.08    # express freight + overtime, as a share of PO value
 SWITCH_ONBOARD_SHARE = 0.02   # extra logistics and quality checks for a new source
+FREIGHT_RS_PER_KM = config.FREIGHT_RS_PER_KM   # road freight for one truckload (assumption, set in .env)
+ROAD_FACTOR = 1.3             # roads are longer than the straight line between two cities
+
+
+def _plant_km(supplier_id, tables) -> float:
+    """Road distance in km from a supplier to our plant (straight line x ROAD_FACTOR)."""
+    plant = tables["meta"].set_index("key").loc["plant", "value"]
+    c = tables["cities"].set_index("city").loc[plant]
+    s = tables["suppliers"].set_index("supplier_id").loc[supplier_id]
+    return haversine_km(c["lat"], c["lon"], s["lat"], s["lon"]) * ROAD_FACTOR
 
 PLAN_WEIGHTS = {
     "Fastest recovery": {"cost": 0.10, "delay": 0.55, "service": 0.35},
@@ -48,7 +59,10 @@ def _options(po, today, tables, down_days, spare):
             continue
         arrival = today + timedelta(days=int(down_days.get(a.supplier_id, 0)) + int(a.lead_days))
         delay = max(0, (arrival - po.due).days)
-        extra = po.qty * (a.unit_price - po.unit_price) + po.value * SWITCH_ONBOARD_SHARE
+        # a farther supplier costs more to truck in: pay only the extra distance over the original route
+        extra_km = max(0.0, _plant_km(a.supplier_id, tables) - _plant_km(po.supplier_id, tables))
+        extra = (po.qty * (a.unit_price - po.unit_price) + po.value * SWITCH_ONBOARD_SHARE
+                 + extra_km * FREIGHT_RS_PER_KM)
         opts.append({"action": "switch", "alt_supplier_id": a.supplier_id, "delay_days": delay,
                      "extra_cost": round(extra, 2)})
     for o in opts:
