@@ -92,3 +92,13 @@ def test_report_severity_follows_days_down():
     sev = {d: signals.event_from_report({"supplier_id": "S20", "issue_type": "flood", "days_down": d, "note": ""}, T).severity
            for d in [1, 2, 3, 4, 7, 8, 14]}
     assert sev == {1: 2, 2: 3, 3: 3, 4: 4, 7: 4, 8: 5, 14: 5}
+
+
+def test_model_sees_money_as_text_and_high_priority_still_late():
+    from reroute import explain
+    res = agent.analyze_text("Heavy rain floods SIPCOT industrial estate in Hosur; units halted for 4-5 days.", T)
+    g = explain.for_model(explain.facts(res["impact"], res["plans"]))
+    bal = next(p for p in g["plans"] if p["name"] == "Balanced")["totals"]
+    assert bal["extra_cost"].startswith("Rs ") and "cost_avoided" not in bal      # delay event: no cost fields
+    assert bal["high_priority_still_late"] == bal["high_priority_affected"] - bal["high_priority_protected"]
+    assert g["summary"]["po_value_at_risk"].startswith("Rs ")
