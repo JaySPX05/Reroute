@@ -59,6 +59,9 @@ def facts(impact: dict, plans: list) -> dict:
             "units_switched": int(switched["qty"].sum()) if len(switched) else 0,
             "customer_orders_late_after_plan": [{"sales_order_id": k, "late_days": int(v)}
                                                 for k, v in dict(late_after).items()],
+            # alternate suppliers that had no spare capacity left, and who booked it (capped like "changes")
+            "capacity_limits": ([f"PO {r.po_id}: {r.capacity_note}" for r in acts.itertuples()
+                                 if getattr(r, "capacity_note", "")][:8] if len(acts) else []),
             "changes": acts[acts["action"] != "wait"][["po_id", "material", "qty", "from_supplier", "action",
                                                      "to_supplier", "delay_before", "delay_after",
                                                      "extra_cost"]].head(12).to_dict("records") if len(acts) else [],
