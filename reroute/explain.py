@@ -28,6 +28,8 @@ In plan totals, high_priority_still_late counts only high-priority orders; sales
 orders of every priority. customer_orders_late_after_plan gives each order still late after that plan and by
 how many days. A plan's "changes" list shows at most 12 changes: for totals use changes_total and
 units_switched, never add up the list.
+A customer order not listed in a plan's customer_orders_late_after_plan is on time after that plan; never describe its delay before the plan as its delay after the plan.
+A customer order not listed in a plan's customer_orders_late_after_plan is on time after that plan; never describe its delay before the plan as its delay after the plan.
 If the facts do not answer the question, say what is missing.
 Write short, plain sentences a busy planner can act on. The planner makes the final decision."""
 
@@ -67,6 +69,7 @@ def facts(impact: dict, plans: list) -> dict:
             # totals over ALL changes, computed here, because "changes" below lists at most 12
             "changes_total": int(len(changed)),
             "units_switched": int(switched["qty"].sum()) if len(switched) else 0,
+                        "units_switched_by_supplier": ({k: int(v) for k, v in switched.groupby("to_supplier")["qty"].sum().items()} if len(switched) else {}),
             "customer_orders_late_after_plan": [{"sales_order_id": k, "late_days": int(v)}
                                                 for k, v in dict(late_after).items()],
             # alternate suppliers that had no spare capacity left, and who booked it (capped like "changes")
