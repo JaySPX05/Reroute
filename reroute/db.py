@@ -31,6 +31,8 @@ RUNTIME_DDL = {
                      "s4_request"],
     "agent_audit_log": ["seq", "ts", "run_id", "sender", "recipient", "kind", "summary", "details",
                   "prev_hash", "hash"],
+    # a cleared supplier report stays in supplier_reports; this table only hides it from the dashboard
+    "cleared_reports": ["report_id", "created_at", "supplier_id", "cleared_at"],
 }
 
 _tl = threading.local()
@@ -261,3 +263,28 @@ def read_rows(table: str) -> pd.DataFrame:
 def now() -> str:
     """Current Indian time as 'YYYY-MM-DDTHH:MM:SS', in the same format as the records already stored."""
     return datetime.now(IST).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _report_key(df: pd.DataFrame) -> pd.Series:
+    # report_id alone isn't unique (two reports in the same second share it), so add the time and supplier
+    return df["report_id"].astype(str) + "|" + df["created_at"].astype(str) + "|" + df["supplier_id"].astype(str)
+
+
+def supplier_reports(include_cleared: bool = False) -> pd.DataFrame:
+    """Supplier reports, without the ones a planner cleared (unless include_cleared)."""
+    reports = read_rows("supplier_reports")
+    if include_cleared or reports.empty:
+        return reports
+    try:
+        cleared = read_rows("cleared_reports")
+    except Exception:  # table not created yet (the app creates it at start-up): nothing is cleared
+        return reports
+    if cleared.empty:
+        return reports
+    return reports[~_report_key(reports).isin(set(_report_key(cleared)))]
+
+
+def clear_supplier_report(report: dict) -> None:
+    """Hide one report from the dashboard. The report itself is kept."""
+    insert_row("cleared_reports", {"report_id": report["report_id"], "created_at": report["created_at"],
+                                   "supplier_id": report["supplier_id"], "cleared_at": now()})

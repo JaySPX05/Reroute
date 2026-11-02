@@ -72,9 +72,9 @@ elif mode == "Paste news or IMD alert":
         st.session_state.pop("approved_plan_name", None)
         run = True
 else:
-    reports = db.read_rows("supplier_reports")
+    reports = db.supplier_reports()          # cleared reports are hidden but kept in the database
     if reports.empty:
-        st.sidebar.info("No supplier reports yet. Open the Supplier report page to send one.")
+        st.sidebar.info("No open supplier reports. Open the Supplier report page to send one.")
     else:
         # newest first (HANA returns rows in no fixed order); the newest is preselected
         reports = reports.sort_values("created_at", ascending=False).reset_index(drop=True)
@@ -92,11 +92,16 @@ else:
         chosen = reports.iloc[i].to_dict()
         if chosen.get("note"):
             st.sidebar.caption(f"Note: {chosen['note']}")
-        if st.sidebar.button("Analyse", type="primary"):
+        b1, b2 = st.sidebar.columns(2)
+        if b1.button("Analyse", type="primary"):
             st.session_state.result = agent.analyze_report(
                 {k: chosen[k] for k in ["supplier_id", "issue_type", "days_down", "note"]}, T, save=False)
             st.session_state.pop("approved_plan_name", None)
             run = True
+        if b2.button("Clear", help="Hide this report from the dashboard once it's dealt with. It stays in the database."):
+            db.clear_supplier_report(chosen)
+            st.toast(f"Cleared: {label(i)}")
+            st.rerun()
 if run:
     st.session_state.chat = []
 
@@ -159,18 +164,24 @@ def show_received_supplier_reports(collapsed: bool = False):
 
     collapsed=True puts the table in a closed expander, so it doesn't push analysis results down the page.
     """
-    reports = db.read_rows("supplier_reports")
+    reports = db.supplier_reports()
+    n_cleared = len(db.supplier_reports(include_cleared=True)) - len(reports)
+    note = f"{n_cleared} cleared report{'s' if n_cleared != 1 else ''} hidden; still stored in the database." if n_cleared else ""
     if collapsed:
         with st.expander(f"Received supplier reports ({len(reports)})", expanded=False):
             _reports_table(reports)
+            if note:
+                st.caption(note)
     else:
         st.subheader("Received Supplier Reports")
         _reports_table(reports)
+        if note:
+            st.caption(note)
 
 
 def _reports_table(reports: pd.DataFrame):
     if reports.empty:
-        st.info("No supplier reports received yet.")
+        st.info("No open supplier reports.")
         return
 
     supplier_names = T["suppliers"][["supplier_id", "name"]].rename(columns={"name": "Supplier name"})

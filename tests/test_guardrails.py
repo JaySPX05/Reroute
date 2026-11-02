@@ -68,3 +68,13 @@ def test_timestamps_are_indian_time_even_on_a_utc_server():
     got = datetime.fromisoformat(db.now())
     assert got.tzinfo is None                                    # same format as stored records
     assert abs((got - expected.replace(tzinfo=None)).total_seconds()) < 5
+
+
+def test_clearing_a_report_hides_it_but_keeps_it(fresh_db):
+    from reroute import agent
+    for sid in ["S14", "S20"]:
+        agent.analyze_report({"supplier_id": sid, "issue_type": "flood", "days_down": 3, "note": ""}, fresh_db, save=True)
+    target = db.supplier_reports().query("supplier_id == 'S14'").iloc[0].to_dict()
+    db.clear_supplier_report(target)
+    assert list(db.supplier_reports()["supplier_id"]) == ["S20"]                     # hidden from the dashboard
+    assert set(db.supplier_reports(include_cleared=True)["supplier_id"]) == {"S14", "S20"}  # still stored
