@@ -21,20 +21,20 @@ Across these tested scenarios, ranked-plan execution was under 0.2 seconds. Exec
 ## 2. Detection Evaluation
 
 Source: `results/eval_summary.md`  
-Command: `python scripts/evaluate.py --signals data/heldout_signals.json --llm` (run once, 2 Nov 2026)  
-Evaluation: 20 held-out labelled signals (14 real disruptions, 6 irrelevant), written without seeing the detection rules and never used for tuning. Generative AI Hub model: gpt-4o-mini via orchestration.
+Command: `python scripts/evaluate.py --signals data/heldout_signals.json --llm`, run once per model on 2 Nov 2026  
+Evaluation: 20 held-out labelled signals (14 real disruptions, 6 irrelevant), written without seeing the detection rules and never used for tuning. Generative AI Hub via orchestration.
 
-| Metric | Generative AI Hub | Keyword rules (offline fallback) |
-|---|---:|---:|
-| Relevant vs. not relevant | 100% correct | 95% correct |
-| Event type on real disruptions | 93% correct (13/14) | 79% correct (11/14) |
-| Supplier matching precision | 97% | 88% |
-| Supplier matching recall | 100% | 82% |
-| Median time per signal | 2,288 ms | 3 ms |
+| Metric | Claude 4.5 Haiku (demo model) | gpt-4o-mini | Keyword rules (offline fallback) |
+|---|---:|---:|---:|
+| Relevant vs. not relevant | 95% correct | 100% correct | 95% correct |
+| Event type on real disruptions | 93% correct (13/14) | 93% correct (13/14) | 79% correct (11/14) |
+| Supplier matching precision | 96% | 97% | 88% |
+| Supplier matching recall | 96% | 100% | 82% |
+| Median time per signal | 1,436 ms | 2,288 ms | 3 ms |
 
-On the slide: "Disruptions correctly detected: 13 of 14 event types, 100% of affected suppliers found (Generative AI Hub, 20 held-out signals)."
+On the slide: "Disruptions correctly detected: 13 of 14 event types, 96% of affected suppliers found (Claude 4.5 Haiku on SAP Generative AI Hub, 20 held-out signals; keyword rules: 11 of 14, 82%)."
 
-For contrast, on the 26 practice signals the rules were tuned on (`python scripts/evaluate.py --llm`), the rules score 100% and the model 84% on event type. That is why the held-out score is the one reported.
+For contrast, on the 26 practice signals the rules were tuned on (`python scripts/evaluate.py --llm`, gpt-4o-mini), the rules score 100% and the model 84% on event type. That is why the held-out score is the one reported.
 
 ## 3. Delay Avoided Per Disruption
 
