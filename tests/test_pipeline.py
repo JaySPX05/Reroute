@@ -86,3 +86,69 @@ def test_agent_network_autonomy_approval_and_audit():
     assert network.verify_audit(rows)["ok"]
     rows.loc[rows.index[3], "summary"] = "edited"
     assert not network.verify_audit(rows)["ok"]
+
+
+def test_report_severity_follows_days_down():
+    sev = {d: signals.event_from_report({"supplier_id": "S20", "issue_type": "flood", "days_down": d, "note": ""}, T).severity
+           for d in [1, 2, 3, 4, 7, 8, 14]}
+    assert sev == {1: 2, 2: 3, 3: 3, 4: 4, 7: 4, 8: 5, 14: 5}
+
+
+def test_model_sees_money_as_text_and_high_priority_still_late():
+    from reroute import explain
+    res = agent.analyze_text("Heavy rain floods SIPCOT industrial estate in Hosur; units halted for 4-5 days.", T)
+    g = explain.for_model(explain.facts(res["impact"], res["plans"]))
+    bal = next(p for p in g["plans"] if p["name"] == "Balanced")["totals"]
+    assert bal["extra_cost"].startswith("Rs ") and "cost_avoided" not in bal      # delay event: no cost fields
+    assert bal["high_priority_still_late"] == bal["high_priority_affected"] - bal["high_priority_protected"]
+    assert g["summary"]["po_value_at_risk"].startswith("Rs ")
+
+
+def test_facts_give_totals_beyond_the_listed_changes():
+    from reroute import explain
+    res = agent.analyze_text("Finance ministry raises basic customs duty on imported lithium-ion cells from 10% to 35%.", T)
+    bal = next(p for p in explain.facts(res["impact"], res["plans"])["plans"] if p["name"] == "Balanced")
+    acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
+    assert bal["units_switched"] == int(acts[acts["action"] == "switch"]["qty"].sum())
+    assert bal["changes_total"] >= len(bal["changes"])
+
+
+def test_capacity_note_names_who_booked_the_backup_and_only_when_it_mattered():
+    res = agent.analyze_text("Chennai Port Authority: all container terminal operations suspended for 8 days.", T)
+    acts = next(p for p in res["plans"] if p["name"] == "Fastest recovery")["actions"].set_index("po_id")
+    note = acts.loc[4500000005, "capacity_note"]
+    assert "Pune Battery Systems" in note and "only 40 spare left" in note
+    assert all(f"PO {po}" in note for po in (4500000013, 4500000021, 4500000029))
+    # an order the plan would not switch even with unlimited room gets no capacity note
+    res = agent.analyze_text("Heavy rain floods SIPCOT industrial estate in Hosur; units halted for 4-5 days.", T)
+    acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
+    covered = acts[(acts["action"] == "wait") & (acts["so_late_after"] == 0)]
+    assert len(covered) and (covered["capacity_note"] == "").all()
+
+
+def _chain_port_then_tariff():
+    from reroute import network
+    net = network.Network(T, persist=False, use_llm=False)
+    list(network.simulate(net, [
+        ("Port", "port_notice", "Chennai Port Authority: all container terminal operations suspended for 8 days."),
+        ("Tariff", "tariff_bulletin",
+         "Finance ministry raises basic customs duty on imported lithium-ion cells from 10% to 35%.")]))
+    return net
+
+
+def test_chained_disruptions_never_book_more_than_the_backup_has():
+    net = _chain_port_then_tariff()
+    sm = T["supplier_materials"].set_index(["supplier_id", "material_id"])
+    cap = sm.loc[("S15", "M05")]
+    booked = sum(q for _, q, _ in net.booked[("S15", "M05")])
+    assert 0 < booked <= cap.weekly_capacity * cap.spare_share * 4    # tariff plans over 4 weeks
+
+
+def test_rejected_switch_frees_its_booking():
+    net = _chain_port_then_tariff()
+    a = next(x for x in net.pending.values() if x["action"] == "switch")
+    key = (a["to_supplier_id"], a["material_id"])
+    before = sum(q for _, q, _ in net.booked[key])
+    net.decide(a["action_id"], approve=False, reason="test")
+    assert sum(q for _, q, _ in net.booked[key]) == before - a["qty"]
+    assert all(pid != a["po_id"] for pid, _, _ in net.booked[key])

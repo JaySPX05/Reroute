@@ -57,11 +57,8 @@ class AuditLog:
         self.last_hash, self.next_seq = "GENESIS", 1
         if persist:
             db.ensure_runtime_tables()
-            rows = db.read_rows("agent_audit_log")
-            if len(rows):
-                rows = rows.sort_values("seq")
-                self.last_hash = rows.iloc[-1]["hash"]
-                self.next_seq = int(rows.iloc[-1]["seq"]) + 1
+            last_seq, self.last_hash = db.audit_tail()
+            self.next_seq = last_seq + 1
 
     @staticmethod
     def digest(prev: str, rec: dict) -> str:
@@ -72,12 +69,29 @@ class AuditLog:
         details = json.dumps(msg.data, default=str)
         if len(details) > 4500:
             details = details[:4500] + "...(truncated)"
-        rec = {"seq": f"{self.next_seq:08d}", "ts": msg.ts, "run_id": self.run_id, "sender": msg.sender,
-               "recipient": msg.recipient, "kind": msg.kind, "summary": msg.summary[:1900], "details": details,
-               "prev_hash": self.last_hash}
-        rec["hash"] = self.digest(self.last_hash, rec)
-        if self.persist:
-            db.insert_row("agent_audit_log", rec)
+        for attempt in range(10):
+            if self.persist and attempt:
+                # another run (another laptop, or another viewer of the hosted app) wrote since we last looked:
+                # chain onto its latest record instead of forking the log
+                last_seq, self.last_hash = db.audit_tail()
+                self.next_seq = last_seq + 1
+            rec = {"seq": f"{self.next_seq:08d}", "ts": msg.ts, "run_id": self.run_id, "sender": msg.sender,
+                   "recipient": msg.recipient, "kind": msg.kind, "summary": msg.summary[:1900], "details": details,
+                   "prev_hash": self.last_hash}
+            rec["hash"] = self.digest(self.last_hash, rec)
+            if not self.persist:
+                break
+            last_seq, last_hash = db.audit_tail()
+            if last_seq != self.next_seq - 1 or last_hash != self.last_hash:
+                continue                      # stale view of the log: re-read and rebuild the record
+            try:
+                db.insert_row("agent_audit_log", rec)
+                break
+            except Exception:
+                if db.audit_tail()[0] < self.next_seq:
+                    raise                     # a real database error, not someone else taking our number
+        else:
+            raise RuntimeError("Audit log is too busy: 10 attempts to append were overtaken by other runs")
         self.records.append(rec)
         self.last_hash, self.next_seq = rec["hash"], self.next_seq + 1
         msg.seq, msg.hash = int(rec["seq"]), rec["hash"]
@@ -138,6 +152,9 @@ class Network:
         self.events = {}          # event_id -> {"event", "impact", "plans"}
         self.pending = {}         # action_id -> action awaiting a human
         self.claimed = {}         # po_id -> event_id that already acted on it in this run
+        # shared booking record: backup-supplier capacity taken by switches in this run, so a later
+        # disruption plans with what is really left. {(supplier_id, material_id): [(po_id, qty, label)]}
+        self.booked = {}
         self.decided = []         # actions executed or rejected
         self.stats = {"messages": 0, "auto": 0, "approved": 0, "rejected": 0, "escalated": 0, "extra_cost": 0.0}
         self.handlers = {"sentinel": self._sentinel, "impact": self._impact, "sourcing": self._sourcing,
@@ -217,9 +234,17 @@ class Network:
             self.send("sourcing", "audit", "plan.none", "Stock and lead times absorb this event; no PO changes.",
                       event_id=eid)
             return
-        plans = planner.build_plans(st["impact"], self.tables)
+        plans = planner.build_plans(st["impact"], self.tables, booked_before=self.booked)
         st["plans"] = plans
         rec = next(p for p in plans if p.get("recommended"))
+        limited = [a for a in rec["actions"].to_dict("records") if "an earlier disruption" in a.get("capacity_note", "")]
+        if limited:
+            names = sorted({note.split("Not switched to ", 1)[1].split(":", 1)[0]
+                            for a in limited for note in a["capacity_note"].split(". ") if "an earlier disruption" in note})
+            self.send("sourcing", "audit", "capacity.limited",
+                      f"Shared capacity respected: {len(limited)} PO(s) not switched to {', '.join(names)}, "
+                      "whose spare capacity an earlier disruption already booked.",
+                      event_id=eid, notes=[a["capacity_note"] for a in limited])
         st["explanation"], method = explain.explain_plans(st["impact"], plans)
         t = rec["totals"]
         gain = (f"saves {explain.inr(t['cost_avoided'])} of {explain.inr(t['cost_if_wait'])}"
@@ -261,6 +286,11 @@ class Network:
                           event_id=eid, po_id=a["po_id"])
                 continue
             self.claimed[a["po_id"]] = eid
+            if a["action"] == "switch":
+                # book the capacity now, even while awaiting approval, so the next disruption can't promise it too
+                label = getattr(st["event"], "event_type", "") or eid
+                self.booked.setdefault((a["to_supplier_id"], a["material_id"]), []).append(
+                    (a["po_id"], int(a["qty"]), label))
             auto, rule = policy_decision(a, wait_cost)
             a["rule"], a["action_id"] = rule, "A-" + uuid.uuid4().hex[:6].upper()
             a["net_cost"] = round(float(a["extra_cost"]) - wait_cost, 2)
@@ -280,6 +310,9 @@ class Network:
         a = self.pending.pop(action_id)
         if not approve:
             self.claimed.pop(a["po_id"], None)   # a rejected order may be planned again later
+            if a["action"] == "switch":          # and its booked capacity is free again
+                key = (a["to_supplier_id"], a["material_id"])
+                self.booked[key] = [b for b in self.booked.get(key, []) if b[0] != a["po_id"]]
         kind = "approval.granted" if approve else "approval.rejected"
         text = ("Approved" if approve else "Rejected") + f" PO {a['po_id']} {a['action']}" + (f": {reason}" if reason else "")
         self.send("planner", "execution", kind, text, action=a, decided_by=by, reason=reason)

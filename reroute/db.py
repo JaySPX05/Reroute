@@ -6,9 +6,15 @@ showcase doesn't open a new HANA connection for every agent message.
 """
 import csv
 import json
+import logging
+import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Indian Standard Time, so a hosted server (which runs on UTC) records the same times as our laptops.
+# A fixed offset needs no time-zone database (Windows has none by default), and India has no daylight saving.
+IST = timezone(timedelta(hours=5, minutes=30))
 
 import pandas as pd
 
@@ -25,13 +31,28 @@ RUNTIME_DDL = {
                      "s4_request"],
     "agent_audit_log": ["seq", "ts", "run_id", "sender", "recipient", "kind", "summary", "details",
                   "prev_hash", "hash"],
+    # a cleared supplier report stays in supplier_reports; this table only hides it from the dashboard
+    "cleared_reports": ["report_id", "created_at", "supplier_id", "cleared_at"],
 }
 
 _tl = threading.local()
+log = logging.getLogger("reroute.db")
 
 
 def backend() -> str:
     return "hana" if config.DB_BACKEND == "hana" else "sqlite"
+
+
+def _guard_reset(what: str) -> None:
+    """HANA is shared by the whole team, so never wipe it by accident.
+
+    SQLite is one person's local file, so it can always be reset.
+    """
+    if backend() == "hana" and os.getenv("REROUTE_ALLOW_RESET", "").lower() != "yes":
+        raise RuntimeError(
+            f"Refusing to {what} on SAP HANA Cloud: it is shared by the whole team, and this would delete the "
+            "supplier reports, approvals and audit log. If everyone agrees, run this one command with "
+            "REROUTE_ALLOW_RESET=yes set in the terminal (not in .env).")
 
 
 def connect():
@@ -121,7 +142,9 @@ def init_db(reset_runtime: bool = True) -> None:
     """Load every CSV from data/ into the database (re-creating the tables).
 
     reset_runtime=True also clears supplier reports, approvals and the audit log.
+    On SAP HANA Cloud this is refused unless REROUTE_ALLOW_RESET=yes (see _guard_reset).
     """
+    _guard_reset("re-create all tables")
     _reset_shared()
     conn = connect()
     cur = conn.cursor()
@@ -154,12 +177,43 @@ def ensure_runtime_tables(reset: bool = False) -> None:
         except Exception:
             conn.rollback() if backend() == "sqlite" else None
         if reset or (current is not None and current != cols):
+            if current is not None:
+                _guard_reset(f"clear the {table} table" if reset else
+                             f"re-create the {table} table (its columns changed)")
             _drop(cur, table)
             current = None
         if current is None:
             _create_runtime(cur, table)
+    _ensure_audit_seq_unique(conn)
     conn.commit()
     conn.close()
+
+
+def _ensure_audit_seq_unique(conn) -> None:
+    """A unique seq makes the database refuse a second record with the same number, so two runs
+    writing at once can never fork the audit chain (AuditLog.append retries instead)."""
+    cur = conn.cursor()
+    name, table, col = _q("agent_audit_log_seq"), _q("agent_audit_log"), _q("seq")
+    try:
+        if backend() == "sqlite":
+            cur.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {name} ON {table} ({col})")
+            return
+        cur.execute("SELECT COUNT(*) FROM INDEXES WHERE SCHEMA_NAME = CURRENT_SCHEMA AND INDEX_NAME = ?",
+                    ["AGENT_AUDIT_LOG_SEQ"])
+        if cur.fetchone()[0] == 0:
+            cur.execute(f"CREATE UNIQUE INDEX {name} ON {table} ({col})")
+    except Exception as e:  # e.g. old duplicate seq values: keep running, the retry still narrows the gap
+        log.warning("Could not make audit seq unique: %s", e)
+
+
+def audit_tail() -> tuple:
+    """(last seq number, last hash) of the stored audit log, read fresh; (0, 'GENESIS') if empty."""
+    def fetch(cur):
+        cur.execute(f"SELECT {_q('seq')}, {_q('hash')} FROM {_q('agent_audit_log')} "
+                    f"ORDER BY {_q('seq')} DESC LIMIT 1")
+        return cur.fetchone()
+    row = _run(fetch)
+    return (int(row[0]), row[1]) if row else (0, "GENESIS")
 
 
 def load_tables() -> dict:
@@ -207,4 +261,46 @@ def read_rows(table: str) -> pd.DataFrame:
 
 
 def now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    """Current Indian time as 'YYYY-MM-DDTHH:MM:SS', in the same format as the records already stored."""
+    return datetime.now(IST).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _report_key(df: pd.DataFrame) -> pd.Series:
+    # report_id alone isn't unique (two reports in the same second share it), so add the time and supplier
+    return df["report_id"].astype(str) + "|" + df["created_at"].astype(str) + "|" + df["supplier_id"].astype(str)
+
+
+def supplier_reports(include_cleared: bool = False) -> pd.DataFrame:
+    """Supplier reports, without the ones a planner cleared (unless include_cleared)."""
+    reports = read_rows("supplier_reports")
+    if include_cleared or reports.empty:
+        return reports
+    try:
+        cleared = read_rows("cleared_reports")
+    except Exception:  # table not created yet (the app creates it at start-up): nothing is cleared
+        return reports
+    if cleared.empty:
+        return reports
+    return reports[~_report_key(reports).isin(set(_report_key(cleared)))]
+
+
+def _ensure_table(table: str) -> None:
+    """Create one runtime table if it's missing. Only ever creates, never drops.
+
+    The app creates its tables once at start-up, but Streamlit Cloud reloads new code without restarting,
+    so a table added in an update may not exist yet on the hosted app.
+    """
+    try:
+        _run(lambda cur: cur.execute(f"SELECT * FROM {_q(table)} WHERE 1 = 0"))
+    except Exception:
+        conn = connect()
+        _create_runtime(conn.cursor(), table)
+        conn.commit()
+        conn.close()
+
+
+def clear_supplier_report(report: dict) -> None:
+    """Hide one report from the dashboard (Mark as resolved). The report itself is kept."""
+    _ensure_table("cleared_reports")
+    insert_row("cleared_reports", {"report_id": report["report_id"], "created_at": report["created_at"],
+                                   "supplier_id": report["supplier_id"], "cleared_at": now()})
