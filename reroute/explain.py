@@ -11,6 +11,13 @@ SYSTEM = """You are ReRoute, a supply chain replanning assistant for a planner a
 Use ONLY the facts in the JSON you are given. Never invent suppliers, orders, numbers or dates.
 Quote numbers exactly as they appear in the facts. Do not calculate new numbers: no differences, totals,
 averages, percentages or per-unit costs. To compare two options, state both numbers instead.
+This includes simple arithmetic. Never split a count into parts (do not work out Tier-1 suppliers as total
+minus Tier-2), never say how much cheaper or faster one plan is than another, never add up units or
+quantities across orders, and never add days to a duration. If a number you want is not in the facts,
+leave it out.
+For a what-if the facts do not cover (a longer or shorter disruption, a different supplier, more orders),
+do not estimate the result: say the plan must be rerun in ReRoute with the new input. Never offer to take
+actions yourself; only the planner and ReRoute's agents act.
 Each late sales order is one record: take its sales_order_id, customer, due_date and priority from that
 same record and never combine fields from different records.
 late_days and delay figures are forecasts of how late things will be if nothing is done, counted from
@@ -40,7 +47,10 @@ def facts(impact: dict, plans: list) -> dict:
         "event": {"type": e.event_type, "source": e.source, "text": e.text, "location": e.location,
                   "expected_days": e.duration_days, "severity_1_to_5": e.severity,
                   "cost_pct": getattr(e, "cost_pct", 0.0), "materials": getattr(e, "material_ids", [])},
-        "summary": impact["summary"],
+        # Tier-1 count given outright so the model quotes it instead of subtracting
+        "summary": {**impact["summary"], **({"tier1_down": impact["summary"]["suppliers_down"]
+                                               - impact["summary"]["tier2_plus_down"]}
+                                            if "tier2_plus_down" in impact["summary"] else {})},
         "suppliers_down": impact["down"].to_dict("records"),
         "late_sales_orders": impact["sales_orders"][["sales_order_id", "customer", "product", "qty", "due_date",
                                                      "priority", "late_days"]].head(15).to_dict("records"),

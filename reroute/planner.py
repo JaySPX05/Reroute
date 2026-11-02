@@ -98,7 +98,7 @@ def _capacity_note(po, sm, spare, booked, sup_names, only: str = "") -> str:
         if left >= po.qty:
             continue
         taken = booked.get((a.supplier_id, po.material_id), [])
-        why = f"Not switched to {sup_names.get(a.supplier_id, a.supplier_id)}: needs {int(po.qty)}, only {int(left)} spare left"
+        why = f"Not switched to {sup_names.get(a.supplier_id, a.supplier_id)}: needs {int(po.qty)}, only {int(left)} spare left, {int(po.qty) - int(left)} short"
         if taken:
             why += " (" + ", ".join(f"{q} booked for PO {pid}" + (f" in {where}" if where else "")
                                     for pid, q, where in taken) + ")"
