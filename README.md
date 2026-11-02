@@ -45,10 +45,41 @@ Limits are set in `.env` with `AUTO_COST_LIMIT_INR` and `BIG_SWITCH_LIMIT_INR`.
 1. `pip install -r requirements-sap.txt`
 2. Copy `.env.example` to `.env` and fill in the keys (see the build guide, Day 1 morning).
 3. `python -m reroute.s4_sandbox` pulls sample POs from the S/4HANA sandbox.
-4. Set `REROUTE_DB=hana`, run `python -c "from reroute import db; db.init_db()"` to load SAP HANA Cloud.
+4. Set `REROUTE_DB=hana`. HANA is already loaded and shared by the team, so `db.init_db()` refuses to run
+   there (it would delete the supplier reports, approvals and audit log). Only if everyone agrees to start
+   over: set `REROUTE_ALLOW_RESET=yes` in the terminal for that one command.
 
 With the AI Core keys set, detection and explanations use Generative AI Hub; without them, or if a
 call fails, ReRoute falls back to keyword rules and templates so the demo never breaks.
+
+## Host it online (Streamlit Community Cloud)
+
+One public link for the dashboard, the live showcase and the phone supplier form, with data in SAP HANA Cloud.
+
+1. At share.streamlit.io, sign in with GitHub and create an app from this repo: branch `demo`, file `app.py`.
+   Under **Advanced settings** pick Python 3.12.
+2. In **Secrets**, paste the HANA settings (never commit them):
+   ```toml
+   REROUTE_DB = "hana"
+   HANA_HOST = "..."
+   HANA_PORT = "443"
+   HANA_USER = "..."
+   HANA_PASSWORD = "..."
+   HANA_SCHEMA = "HACKFEST0294"
+   ```
+   Streamlit passes these to the app as environment variables, which is what `reroute/config.py` reads.
+3. Deploy. Suppliers open `<your-app>.streamlit.app/Supplier_report` on any phone.
+
+- Deploy from `demo`, not `main`: the site redeploys on every push to its branch. Update `demo` on purpose
+  (`git checkout demo && git merge main && git push`) only after testing.
+- Anyone with the link can send reports and approve plans. Share it only with the team and judges.
+- The app sleeps when unused: open it about 30 minutes before presenting.
+- Only one person runs the Live showcase at a time during the demo, so the feed is easy to follow.
+
+## Report from a phone without hosting
+
+Run `python -m streamlit run app.py --server.address 0.0.0.0`, then open the printed **Network URL** on a
+phone on the same Wi-Fi (or the laptop's hotspot). Allow Python through Windows Firewall on private networks.
 
 ## Layout
 
