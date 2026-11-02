@@ -292,8 +292,11 @@ ev, imp, plans, s = res["event"], res["impact"], res["plans"], res["impact"]["su
 title = f"{ev.event_type.title()}" + (f" · {ev.location}" if ev.location else "") + (f" · {ev.state}" if ev.scope == "state" else "")
 st.title(title if ev.relevant else "No disruption detected")
 st.caption("Kaveri EV Motors · Supply Chain Resilience")
+tm = res["timings_ms"]
+plan_ms = tm["total"] - tm["explain"]   # detection (if any) + tracing + planning; the explanation is separate
 st.caption(f"{ev.text}  \nDetected by: {ev.method} · expected {ev.duration_days} days · severity {ev.severity}/5 · "
-           f"{res['timings_ms']['total']:.0f} ms from signal to plan")
+           f"{plan_ms:.0f} ms to a ranked plan · explanation by "
+           f"{'Generative AI Hub' if res.get('explain_method') == 'llm' else 'template'} in {tm['explain'] / 1000:.1f} s")
 
 show_received_supplier_reports(collapsed=True)
 

@@ -57,7 +57,8 @@ def scenarios() -> pd.DataFrame:
                      "delay_avoided_days": bal["delay_avoided_days"], "extra_cost_inr": bal["extra_cost"],
                      "high_priority_protected": bal["high_priority_protected"],
                      "high_priority_affected": bal["high_priority_affected"],
-                     "signal_to_plan_ms": res["timings_ms"]["total"]})
+                     # time to a ranked plan; the written explanation (an AI call when connected) is excluded
+                     "signal_to_plan_ms": res["timings_ms"]["total"] - res["timings_ms"]["explain"]})
     return pd.DataFrame(rows)
 
 

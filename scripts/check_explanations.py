@@ -59,6 +59,12 @@ def supported(token: str, values: list) -> bool:
     return False
 
 
+def context(text: str, bad: list) -> list:
+    """The lines of the explanation that contain an unsupported number, so a person can judge each one."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return [ln for ln in lines if any(t in NUM.findall(ln) for t in bad)]
+
+
 def check(text: str, facts: dict) -> tuple:
     values = fact_values(json.loads(json.dumps(facts, default=str)))
     tokens = NUM.findall(text)
@@ -89,6 +95,8 @@ def main():
         ok, bad = check(r["explanation"], explain.facts(r["impact"], r["plans"]))
         total_bad += len(bad)
         print(f"{name:28} {r['explain_method']:9} {len(ok):>9} {len(bad):>11}  {', '.join(bad) or '-'}")
+        for line in context(r["explanation"], bad):
+            print(f"{'':30}> {line}")
 
     print("\nChat questions (asked about the Hosur flood):")
     for q in QUESTIONS:
