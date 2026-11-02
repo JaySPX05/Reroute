@@ -389,8 +389,8 @@ with tab_plan:
                 c4.metric("Purchase orders changed", t["pos_changed"])
 
                 b = logistics.cost_breakdown(T, imp, p)
-                st.caption(f"Total including estimated shipping: **{explain.inr(b['total_with_shipping'])}** "
-                           f"(shipping change {explain.inr(b['shipping_change'])})")
+                st.caption(f"Includes **{explain.inr(b['extra_freight'])}** extra freight for farther suppliers "
+                           f"(estimate: Rs {config.FREIGHT_RS_PER_KM:.0f} per road km, one truck per PO)")
                 with st.expander("Cost breakdown", expanded=p["name"] == st.session_state.get("approved_plan_name")):
                     st.dataframe(logistics.breakdown_table(b, explain.inr), hide_index=True, width="stretch")
 
@@ -403,7 +403,8 @@ with tab_plan:
                     st.session_state.approved_plan_name = p["name"]
                     st.success(
                         f"Approved. {n} PO changes queued and supplier messages drafted. "
-                        f"Total including estimated shipping: {explain.inr(b['total_with_shipping'])}. "
+                        f"Total extra cost {explain.inr(b['total'])}, including "
+                        f"{explain.inr(b['extra_freight'])} extra freight. "
                         "See the Map tab for the new routes and Approved actions for the breakdown."
                     )
 
@@ -550,16 +551,16 @@ with tab_done:
         lines = logistics.plan_lines(T, imp, approved_plan)
         changed = lines[lines["action"] != "wait"] if len(lines) else lines
         if len(changed):
-            st.caption("Per purchase order (shipping is an estimate: one truck per PO, road km = straight-line x "
-                       f"{config.ROAD_FACTOR})")
-            money = ["price_difference", "new_supplier_checks", "expedite_fee", "shipping_change", "planner_extra_cost"]
+            st.caption("Per purchase order (freight is an estimate: one truck per PO, road km = straight-line x "
+                       f"{config.ROAD_FACTOR}, Rs {config.FREIGHT_RS_PER_KM:.0f} per extra km)")
+            money = ["price_difference", "new_supplier_checks", "extra_freight", "expedite_fee", "planner_extra_cost"]
             view = changed.assign(**{c: changed[c].map(explain.inr) for c in money})
             st.dataframe(view[["po_id", "action", "from_supplier", "to_supplier", "qty", "km_before", "km_after",
                                *money]].rename(columns={
                 "po_id": "PO", "action": "Action", "from_supplier": "From", "to_supplier": "To", "qty": "Qty",
                 "km_before": "Road km before", "km_after": "Road km after", "price_difference": "Price difference",
-                "new_supplier_checks": "New-supplier checks", "expedite_fee": "Expedite fee",
-                "shipping_change": "Shipping change", "planner_extra_cost": "Extra cost (planner)"}),
+                "new_supplier_checks": "New-supplier checks", "extra_freight": "Extra freight",
+                "expedite_fee": "Expedite fee", "planner_extra_cost": "Extra cost"}),
                 hide_index=True, width="stretch")
         st.divider()
         st.subheader("All approved changes")

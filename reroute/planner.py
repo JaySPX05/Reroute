@@ -22,7 +22,7 @@ EXPEDITE_SAVES_DAYS = 1
 EXPEDITE_COST_SHARE = 0.08    # express freight + overtime, as a share of PO value
 SWITCH_ONBOARD_SHARE = 0.02   # extra logistics and quality checks for a new source
 FREIGHT_RS_PER_KM = config.FREIGHT_RS_PER_KM   # road freight for one truckload (assumption, set in .env)
-ROAD_FACTOR = 1.3             # roads are longer than the straight line between two cities
+ROAD_FACTOR = config.ROAD_FACTOR   # roads are longer than the straight line (set in .env)
 
 
 def _plant_km(supplier_id, tables) -> float:

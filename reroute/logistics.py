@@ -1,15 +1,18 @@
 """Shipping routes from suppliers to our plant, and a cost breakdown for each recovery plan.
 
-Display only: the planner ranks plans on its own costs (price difference, 2% new-supplier checks,
-8% expedite fee, higher duty) and never sees these shipping figures. Shipping is an estimate:
-one truckload per purchase order, road distance = straight-line distance x ROAD_FACTOR, and the
-per-km rates in config (set in .env). Say so wherever it is shown.
+The breakdown splits the planner's extra cost into its parts, so the parts always add up to the cost
+used to rank plans:
+  price difference      switch: (new supplier's price - original price) x quantity
+  new-supplier checks   switch: SWITCH_ONBOARD_SHARE of the PO value
+  extra freight         switch: extra road km to the plant x FREIGHT_RS_PER_KM (nothing if the new supplier is closer)
+  expedite fee          expedite: EXPEDITE_COST_SHARE of the PO value (express freight and overtime)
+  higher duty           wait, after a tariff: the extra duty the order pays
+Freight is an assumption: one truckload per PO, road km = straight-line km x ROAD_FACTOR, rate in .env.
 """
 import pandas as pd
 
 from . import config
-from .planner import EXPEDITE_COST_SHARE, SWITCH_ONBOARD_SHARE
-from .signals import haversine_km
+from .planner import EXPEDITE_COST_SHARE, SWITCH_ONBOARD_SHARE, _plant_km
 
 
 def plant(tables) -> dict:
@@ -20,15 +23,8 @@ def plant(tables) -> dict:
 
 
 def road_km(tables, supplier_id: str) -> float:
-    s = tables["suppliers"].set_index("supplier_id").loc[supplier_id]
-    p = plant(tables)
-    return round(haversine_km(float(s["lat"]), float(s["lon"]), p["lat"], p["lon"]) * config.ROAD_FACTOR, 1)
-
-
-def freight(tables, supplier_id: str, express: bool = False) -> float:
-    """Estimated cost of one truckload from a supplier to the plant."""
-    rate = config.EXPRESS_FREIGHT_RS_PER_KM if express else config.FREIGHT_RS_PER_KM
-    return round(road_km(tables, supplier_id) * rate, 2)
+    """Estimated road km from a supplier to the plant, the same figure the planner uses."""
+    return round(_plant_km(supplier_id, tables), 1)
 
 
 def _ids(tables) -> dict:
@@ -36,11 +32,7 @@ def _ids(tables) -> dict:
 
 
 def plan_lines(tables, impact: dict, plan: dict) -> pd.DataFrame:
-    """One row per purchase order in the plan, with its cost split into parts and its shipping route.
-
-    price_difference + new_supplier_checks + expedite_fee + duty_if_waiting equals the planner's
-    extra_cost for that row; shipping_change is the extra estimate on top.
-    """
+    """One row per purchase order in the plan, with its extra cost split into parts and its route."""
     acts = plan["actions"]
     if acts.empty:
         return pd.DataFrame()
@@ -53,19 +45,19 @@ def plan_lines(tables, impact: dict, plan: dict) -> pd.DataFrame:
         orig = ids[a.from_supplier]
         row = {"po_id": a.po_id, "action": a.action, "from_supplier_id": orig, "from_supplier": a.from_supplier,
                "to_supplier_id": orig, "to_supplier": a.from_supplier, "qty": int(a.qty),
-               "price_difference": 0.0, "new_supplier_checks": 0.0, "expedite_fee": 0.0, "duty_if_waiting": 0.0,
-               "km_before": road_km(tables, orig), "km_after": road_km(tables, orig), "shipping_change": 0.0,
+               "price_difference": 0.0, "new_supplier_checks": 0.0, "extra_freight": 0.0, "expedite_fee": 0.0,
+               "duty_if_waiting": 0.0, "km_before": road_km(tables, orig), "km_after": road_km(tables, orig),
                "planner_extra_cost": float(a.extra_cost)}
         if a.action == "switch":
             alt = ids[a.to_supplier]
+            extra_km = max(0.0, _plant_km(alt, tables) - _plant_km(orig, tables))
             row.update(to_supplier_id=alt, to_supplier=a.to_supplier, km_after=road_km(tables, alt),
                        price_difference=round(int(a.qty) * (float(price.loc[(alt, po["material_id"])])
                                                            - float(po["unit_price"])), 2),
                        new_supplier_checks=round(float(a.value) * SWITCH_ONBOARD_SHARE, 2),
-                       shipping_change=round(freight(tables, alt) - freight(tables, orig), 2))
+                       extra_freight=round(extra_km * config.FREIGHT_RS_PER_KM, 2))
         elif a.action == "expedite":
-            row.update(expedite_fee=round(float(a.value) * EXPEDITE_COST_SHARE, 2),
-                       shipping_change=round(freight(tables, orig, express=True) - freight(tables, orig), 2))
+            row.update(expedite_fee=round(float(a.value) * EXPEDITE_COST_SHARE, 2))
         else:  # wait: after a tariff, waiting means paying the higher duty
             row.update(duty_if_waiting=float(a.extra_cost))
         rows.append(row)
@@ -73,29 +65,23 @@ def plan_lines(tables, impact: dict, plan: dict) -> pd.DataFrame:
 
 
 PARTS = [("price_difference", "Product price difference (new supplier)"),
-         ("new_supplier_checks", f"New-supplier logistics and checks ({SWITCH_ONBOARD_SHARE:.0%} of PO value)"),
-         ("expedite_fee", f"Expedite fee: overtime and priority handling ({EXPEDITE_COST_SHARE:.0%} of PO value)"),
+         ("new_supplier_checks", f"New-supplier quality checks and onboarding ({SWITCH_ONBOARD_SHARE:.0%} of PO value)"),
+         ("extra_freight", "Extra freight for a farther supplier (extra road km x rate, one truck per PO)"),
+         ("expedite_fee", f"Expedite fee: express freight and overtime ({EXPEDITE_COST_SHARE:.0%} of PO value)"),
          ("duty_if_waiting", "Higher import duty on orders that stay")]
 
 
 def cost_breakdown(tables, impact: dict, plan: dict) -> dict:
-    """Totals for one plan: the planner's parts, the shipping estimate, and the total including shipping."""
+    """The plan's extra cost split into parts; the parts add up to the planner's total."""
     lines = plan_lines(tables, impact, plan)
     parts = {k: round(float(lines[k].sum()), 2) if len(lines) else 0.0 for k, _ in PARTS}
-    planner_total = round(float(plan["totals"]["extra_cost"]), 2)
-    shipping = round(float(lines["shipping_change"].sum()), 2) if len(lines) else 0.0
-    return {**parts, "planner_extra_cost": planner_total, "shipping_change": shipping,
-            "total_with_shipping": round(planner_total + shipping, 2)}
+    return {**parts, "total": round(float(plan["totals"]["extra_cost"]), 2)}
 
 
 def breakdown_table(b: dict, inr) -> pd.DataFrame:
     """The breakdown as rows for display; zero parts are left out. inr formats rupees."""
     rows = [{"Cost": label, "Amount": inr(b[k])} for k, label in PARTS if abs(b[k]) >= 0.5]
-    rows.append({"Cost": "Extra cost used to rank plans", "Amount": inr(b["planner_extra_cost"])})
-    rows.append({"Cost": "Shipping change (estimate: one truck per PO, "
-                         f"Rs {config.FREIGHT_RS_PER_KM:.0f}/km standard, Rs {config.EXPRESS_FREIGHT_RS_PER_KM:.0f}/km express)",
-                 "Amount": inr(b["shipping_change"])})
-    rows.append({"Cost": "Total including shipping", "Amount": inr(b["total_with_shipping"])})
+    rows.append({"Cost": "Total extra cost", "Amount": inr(b["total"])})
     return pd.DataFrame(rows)
 
 
