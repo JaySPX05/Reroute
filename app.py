@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from reroute import agent, config, db, explain, llm
+from reroute import agent, config, db, explain, impact, llm, planner, signals
 
 st.set_page_config(page_title="ReRoute", layout="wide")
 st.markdown(
@@ -56,6 +56,7 @@ T = tables()
 # ------------------------------------------------------------------ sidebar
 mode = st.sidebar.radio("Signal", ["Demo scenario", "Paste news or IMD alert", "Supplier reports"])
 run = False
+glance = False
 if mode == "Demo scenario":
     pick = st.sidebar.selectbox("Scenario", list(DEMO))
     st.sidebar.write(f"_{TEXT[DEMO[pick]]['text']}_")
@@ -78,7 +79,9 @@ else:
         # newest first (HANA returns rows in no fixed order); the newest is preselected
         reports = reports.sort_values("created_at", ascending=False).reset_index(drop=True)
         names = T["suppliers"].set_index("supplier_id")["name"]
+        glance = st.sidebar.radio("View", ["One report", "All at a glance"], horizontal=True) == "All at a glance"
 
+    if not reports.empty and not glance:
         def label(i: int) -> str:
             r = reports.iloc[i]
             when = str(r["created_at"])[:16].replace("T", " ")
@@ -190,7 +193,79 @@ def _reports_table(reports: pd.DataFrame):
         width="stretch",
     )
 
+
+@st.cache_data(ttl=300, show_spinner="Analysing every supplier report...")
+def analyse_all_reports(rows: tuple, _tables) -> list:
+    """Trace and plan each report on its own (no written explanation, so no AI call per report)."""
+    out = []
+    for created_at, supplier_id, issue, days, note in rows:
+        ev = signals.match_suppliers(signals.event_from_report(
+            {"supplier_id": supplier_id, "issue_type": issue, "days_down": days, "note": note}, _tables), _tables)
+        imp = impact.trace(ev, _tables)
+        plans = planner.build_plans(imp, _tables)
+        rec = next((p for p in plans if p.get("recommended")), plans[0] if plans else None)
+        sos = imp["sales_orders"]
+        out.append({"created_at": created_at, "supplier_id": supplier_id, "issue": issue, "days": days,
+                    "summary": imp["summary"], "plan": rec["name"] if rec else "", "totals": rec["totals"] if rec else {},
+                    "down": imp["down"][["supplier_id", "via"]].to_dict("records") if len(imp["down"]) else [],
+                    "late_orders": sos[["sales_order_id", "priority"]].to_dict("records") if len(sos) else []})
+    return out
+
+
+def show_reports_at_a_glance(reports: pd.DataFrame):
+    st.title("Supplier reports at a glance")
+    st.caption("Kaveri EV Motors · Supply Chain Resilience")
+    if reports.empty:
+        st.info("No supplier reports received yet.")
+        return
+    rows = tuple((str(r.created_at), r.supplier_id, r.issue_type, r.days_down, r.note or "")
+                 for r in reports.itertuples())
+    results = analyse_all_reports(rows, T)
+    names = T["suppliers"].set_index("supplier_id")["name"]
+
+    # totals count each supplier and customer order once, even if several reports hit it
+    down, late = {}, {}
+    for r in results:
+        for d in r["down"]:
+            if down.get(d["supplier_id"]) != "hit directly":
+                down[d["supplier_id"]] = d["via"]
+        for o in r["late_orders"]:
+            late[o["sales_order_id"]] = o["priority"]
+    c = st.columns(4)
+    c[0].metric("Reports received", len(results))
+    c[1].metric("Suppliers down", len(down))
+    c[2].metric("Customer orders at risk", len(late))
+    c[3].metric("High-priority orders at risk", sum(p == "High" for p in late.values()))
+
+    table = []
+    for r in results:
+        s, t = r["summary"], r["totals"]
+        status = ("High-priority at risk" if s.get("high_priority_late") else
+                  "Customer orders late" if s.get("sales_orders_late") else "Covered by stock")
+        table.append({
+            "Received": r["created_at"][:16].replace("T", " "),
+            "Supplier": names.get(r["supplier_id"], r["supplier_id"]),
+            "Issue": f"{r['issue']}, {r['days']} days",
+            "Status": status,
+            "Suppliers down": s.get("suppliers_down", 0),
+            "POs at risk": s.get("pos_at_risk", 0),
+            "Customer orders late": s.get("sales_orders_late", 0),
+            "High-priority late": s.get("high_priority_late", 0),
+            "Recommended plan: extra cost": explain.inr(t.get("extra_cost", 0)),
+            "Order-days avoided": f"{t.get('delay_avoided_days', 0)} of {t.get('late_days_before', 0)}",
+            "High-priority kept on time": f"{t.get('high_priority_protected', 0)} of {t.get('high_priority_affected', 0)}",
+        })
+    st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
+    st.caption("Each report is analysed on its own, newest first. To see a report's three plans and approve one, "
+               "switch the sidebar to **One report** and pick it.")
+    network_map(pd.DataFrame([{"supplier_id": k, "via": v} for k, v in down.items()]))
+
+
 # ------------------------------------------------------------------ main
+if glance:
+    show_reports_at_a_glance(reports)
+    st.stop()
+
 res = st.session_state.get("result")
 if not res:
     st.title("ReRoute")
