@@ -5,8 +5,11 @@ from pathlib import Path
 import altair as alt
 import pandas as pd
 import streamlit as st
+import networkx as nx
+from streamlit_folium import st_folium
 
 from reroute import agent, config, db, explain, llm
+from reroute import gis_routing
 
 st.set_page_config(page_title="ReRoute", layout="wide")
 st.markdown(
@@ -108,6 +111,12 @@ def network_map(down: pd.DataFrame | None = None):
     st.caption("Blue: our plant (Bidadi). Red: hit directly. Amber: down through a supplier it depends on. Grey: unaffected.")
 
 
+@st.cache_resource
+def get_gis_graph(start, end):
+    """Cache the OpenStreetMap road graph for the selected endpoints."""
+    return gis_routing.load_road_network(start, end)
+
+
 def customer_order_risk(result: dict) -> pd.DataFrame:
     """Combine actual order deadlines with the simulation's current customer-level delay."""
     orders = T["sales_orders"].copy()
@@ -168,8 +177,9 @@ c2.metric("Purchase orders at risk", s["pos_at_risk"], explain.inr(s["po_value_a
 c3.metric("Customer orders late", s["sales_orders_late"], f"{s['high_priority_late']} high-priority", delta_color="off")
 c4.metric("Order-days late if we wait", s["baseline_late_days"])
 
-tab_impact, tab_risk, tab_plan, tab_map, tab_ask, tab_done = st.tabs(
-    ["Impact", "Customer Order Risk Analysis", "Recovery plans", "Map", "Ask ReRoute", "Approved actions"])
+tab_impact, tab_risk, tab_plan, tab_map, tab_route, tab_ask, tab_done = st.tabs(
+    ["Impact", "Customer Order Risk Analysis", "Recovery plans", "Map",
+     "Route GIS", "Ask ReRoute", "Approved actions"])
 
 with tab_plan:
     if s["pos_at_risk"] == 0:
@@ -304,6 +314,223 @@ with tab_risk:
 
 with tab_map:
     network_map(imp["down"])
+
+
+with tab_route:
+    st.subheader("GIS-Based Route Disruption Analysis")
+    st.write(
+        "Visualize the original delivery route, simulate a road disruption, "
+        "and calculate an alternative route on the map."
+    )
+
+    cities = T["cities"].copy()
+    suppliers_gis = T["suppliers"].copy()
+
+    required = {"supplier_id", "name", "lat", "lon"}
+
+    if not required.issubset(suppliers_gis.columns):
+        st.error("The suppliers table must contain supplier_id, name, lat and lon columns.")
+    elif not {"city", "lat", "lon"}.issubset(cities.columns):
+        st.error("The cities table must contain city, lat and lon columns.")
+    elif "Bidadi" not in cities["city"].values:
+        st.error("Bidadi coordinates were not found in the cities table.")
+    elif suppliers_gis.empty:
+        st.info("No suppliers are available for route analysis.")
+    else:
+        plant = cities.set_index("city").loc["Bidadi"]
+        start = (float(plant["lat"]), float(plant["lon"]))
+
+        # Ignore rows without usable coordinates.
+        suppliers_gis = suppliers_gis.dropna(subset=["lat", "lon"]).copy()
+
+        if suppliers_gis.empty:
+            st.warning("No suppliers have valid latitude and longitude coordinates.")
+        else:
+            supplier_ids = suppliers_gis["supplier_id"].astype(str).tolist()
+            selected_id = st.selectbox(
+                "Select destination supplier",
+                supplier_ids,
+                format_func=lambda sid: str(
+                    suppliers_gis.loc[
+                        suppliers_gis["supplier_id"].astype(str) == sid, "name"
+                    ].iloc[0]
+                ),
+                key="gis_supplier_id",
+            )
+
+            supplier = suppliers_gis.loc[
+                suppliers_gis["supplier_id"].astype(str) == selected_id
+            ].iloc[0]
+            end = (float(supplier["lat"]), float(supplier["lon"]))
+
+            objective_label = st.selectbox(
+                "Route objective",
+                ["Shortest distance", "Fastest travel time"],
+                key="gis_route_objective",
+            )
+            objective = "length" if objective_label == "Shortest distance" else "travel_time"
+
+            if st.button("Generate original route", type="primary", key="gis_generate_route"):
+                try:
+                    with st.spinner("Downloading OpenStreetMap roads and calculating route..."):
+                        graph = get_gis_graph(start, end)
+                        path = gis_routing.calculate_route(graph, start, end, objective)
+
+                    st.session_state.gis_route_data = {
+                        "graph": graph,
+                        "original": path,
+                        "start": start,
+                        "end": end,
+                        "supplier_id": selected_id,
+                        "supplier_name": str(supplier["name"]),
+                        "objective": objective,
+                    }
+                    st.session_state.gis_reroute_data = None
+                    st.success("Original delivery route generated.")
+                except Exception as exc:
+                    st.error(f"Could not generate original route: {exc}")
+
+            data = st.session_state.get("gis_route_data")
+
+            if data:
+                if data["supplier_id"] != selected_id:
+                    st.warning("Supplier changed. Generate the original route again.")
+                elif data["objective"] != objective:
+                    st.warning("Route objective changed. Generate the original route again.")
+                else:
+                    graph = data["graph"]
+                    original = data["original"]
+                    before = gis_routing.route_statistics(graph, original)
+
+                    st.markdown("#### Original delivery route")
+                    a, b, c = st.columns(3)
+                    a.metric("Distance", f"{before['distance_km']} km")
+                    b.metric("Estimated travel time", f"{before['time_min']} min")
+                    c.metric("Road segments", len(original) - 1)
+
+                    st.divider()
+                    st.markdown("#### Simulate a road disruption")
+
+                    kind = st.selectbox(
+                        "Disruption type",
+                        ["Flooded road", "Road closure", "Accident", "Construction work"],
+                        key="gis_disruption_kind",
+                    )
+
+                    disruption_mode = st.radio(
+                        "How should the affected road be selected?",
+                        [
+                            "Automatically choose a segment near the supplier (demo proxy)",
+                            "Choose a segment manually",
+                        ],
+                        key="gis_disruption_mode",
+                        horizontal=False,
+                    )
+
+                    if len(original) < 2:
+                        st.error("The calculated route does not contain a road segment to disrupt.")
+                    else:
+                        if disruption_mode.startswith("Automatically"):
+                            # Demo proxy: select the final road segment nearest the chosen supplier.
+                            # This is not live flood geocoding or a verified closure location.
+                            index = len(original) - 2
+                            st.info(
+                                f"Demo location proxy selected segment {index + 1}, "
+                                f"the road segment nearest {data['supplier_name']}. "
+                                "A real flood location feed/geocoding service is needed "
+                                "to identify the actual flooded road automatically."
+                            )
+                        else:
+                            index = st.slider(
+                                "Choose a road segment on the original route to disrupt",
+                                0, len(original) - 2, (len(original) - 2) // 2,
+                                key="gis_disrupted_segment",
+                            )
+
+                        st.warning(
+                            f"Simulated {kind.lower()} on route segment {index + 1}. "
+                            "This is a prototype simulation, not a live road-closure report."
+                        )
+
+                        if st.button("Simulate disruption and reroute", key="gis_run_reroute"):
+                            try:
+                                with st.spinner("Finding an alternative path..."):
+                                    alternative, blocked = gis_routing.calculate_reroute(
+                                        graph, original, index, data["objective"]
+                                    )
+
+                                st.session_state.gis_reroute_data = {
+                                    "route": alternative,
+                                    "blocked": blocked,
+                                    "type": kind,
+                                    "segment_index": index,
+                                    "selection_mode": disruption_mode,
+                                }
+                                st.success("Alternative route calculated successfully.")
+                            except nx.NetworkXNoPath:
+                                st.session_state.gis_reroute_data = None
+                                st.error("No alternative route exists after blocking this road segment.")
+                            except Exception as exc:
+                                st.error(f"Rerouting failed: {exc}")
+
+                    reroute = st.session_state.get("gis_reroute_data")
+                    alternative = reroute["route"] if reroute else None
+                    blocked = reroute["blocked"] if reroute else None
+
+                    st.divider()
+                    st.markdown("#### Interactive GIS map")
+                    st.caption(
+                        "Blue: original route | Red: blocked road | Green: alternative route. "
+                        "Use the map controls to zoom and inspect the road network."
+                    )
+
+                    route_map = gis_routing.create_route_map(
+                        graph,
+                        data["start"],
+                        data["end"],
+                        original,
+                        alternative,
+                        blocked,
+                    )
+                    st_folium(
+                        route_map,
+                        width=None,
+                        height=720,
+                        key="reroute_route_gis_map",
+                        returned_objects=[],
+                    )
+
+                    if reroute:
+                        after = gis_routing.route_statistics(graph, alternative)
+
+                        st.divider()
+                        st.markdown("#### Before vs after disruption")
+                        left, right = st.columns(2)
+
+                        with left:
+                            st.markdown("**Original route**")
+                            st.metric("Distance", f"{before['distance_km']} km")
+                            st.metric("Travel time", f"{before['time_min']} min")
+
+                        with right:
+                            st.markdown("**Alternative route**")
+                            st.metric(
+                                "Distance",
+                                f"{after['distance_km']} km",
+                                delta=f"{after['distance_km'] - before['distance_km']:+.2f} km",
+                            )
+                            st.metric(
+                                "Travel time",
+                                f"{after['time_min']} min",
+                                delta=f"{after['time_min'] - before['time_min']:+.1f} min",
+                            )
+
+                        st.success(
+                            f"The alternative route avoids the simulated "
+                            f"{reroute['type'].lower()} segment."
+                        )
+            else:
+                st.info("Select a supplier and click Generate original route to begin.")
 
 with tab_ask:
     st.caption("Ask about this disruption, for example: Why not switch everything to Coimbatore? Which customers should we call?")
