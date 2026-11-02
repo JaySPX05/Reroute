@@ -129,12 +129,59 @@ def network_map(down: pd.DataFrame | None = None):
     st.caption("Blue: our plant (Bidadi). Red: hit directly. Amber: down through a supplier it depends on. Grey: unaffected.")
 
 
-ROUTE_COLORS = {"original": [214, 40, 40], "switch": [31, 111, 235], "expedite": [244, 161, 0]}
+ROUTE_COLORS = {"original": [214, 40, 40], "switch": [31, 111, 235], "expedite": [142, 68, 173]}
 APPROVED_COLOR = [46, 139, 87]
 
 
+def _hex(rgb) -> str:
+    return "#%02x%02x%02x" % tuple(rgb)
+
+
+def _curve(lon1, lat1, lon2, lat2, bend=0.18, n=24) -> list:
+    """A gently bowed path from one point to another, so a new route never sits on top of a straight original one."""
+    mx, my = (lon1 + lon2) / 2, (lat1 + lat2) / 2
+    dx, dy = lon2 - lon1, lat2 - lat1
+    cx, cy = mx - dy * bend, my + dx * bend          # control point, pushed sideways from the midpoint
+    out = []
+    for i in range(n + 1):
+        t = i / n
+        out.append([(1 - t) ** 2 * lon1 + 2 * (1 - t) * t * cx + t ** 2 * lon2,
+                    (1 - t) ** 2 * lat1 + 2 * (1 - t) * t * cy + t ** 2 * lat2])
+    return out
+
+
+def map_legend(routes: pd.DataFrame, approved: bool):
+    """A key under the map: dot colours for places, line styles for routes actually on the map."""
+    def dot(color, label, size=10):
+        return (f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;white-space:nowrap">'
+                f'<span style="width:{size}px;height:{size}px;border-radius:50%;background:{color};display:inline-block">'
+                f'</span>{label}</span>')
+
+    def line(color, label, curved):
+        path = "M2 10 Q13 0 24 10" if curved else "M2 6 L24 6"
+        return (f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;white-space:nowrap">'
+                f'<svg width="26" height="12"><path d="{path}" stroke="{color}" stroke-width="3" fill="none"/></svg>'
+                f'{label}</span>')
+
+    items = [dot(_hex([31, 111, 235]), "Our plant", 13), dot("#d62828", "Supplier hit directly"),
+             dot("#f4a100", "Down through a supplier it depends on"), dot("#8a94a6", "Unaffected supplier")]
+    kinds = set(routes["kind"]) if len(routes) else set()
+    if "original" in kinds:
+        items.append(line(_hex(ROUTE_COLORS["original"]), "Original route (disrupted)", False))
+    if approved and kinds & {"switch", "expedite"}:
+        items.append(line(_hex(APPROVED_COLOR), "Approved plan route", True))
+    else:
+        if "switch" in kinds:
+            items.append(line(_hex(ROUTE_COLORS["switch"]), "New supplier route", True))
+        if "expedite" in kinds:
+            items.append(line(_hex(ROUTE_COLORS["expedite"]), "Express shipment, same supplier", True))
+    st.markdown('<div style="display:flex;flex-wrap:wrap;row-gap:6px;font-size:0.9rem;margin:4px 0 8px">'
+                + "".join(items) + "</div>", unsafe_allow_html=True)
+
+
 def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
-    """Suppliers and plant as dots; disrupted original routes as red lines; the plan's routes as arcs."""
+    """Flat 2D map: suppliers and plant as dots, disrupted original routes as straight red lines,
+    the plan's routes as curves so they stay visible next to the originals. A legend sits underneath."""
     sup = T["suppliers"].copy()
     status = dict(zip(down["supplier_id"], down["via"])) if len(down) else {}
     sup["color"] = sup["supplier_id"].map(lambda s: [138, 148, 166] if s not in status else
@@ -159,18 +206,25 @@ def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
         pts += list(zip(r["from_lat"], r["from_lon"]))
         layers.append(pdk.Layer("LineLayer", r[r["kind"] == "original"], get_source_position=["from_lon", "from_lat"],
                                 get_target_position=["to_lon", "to_lat"], get_color="color", get_width=4, pickable=True))
-        new = r[r["kind"] != "original"]
-        layers.append(pdk.Layer("ArcLayer", new, get_source_position=["from_lon", "from_lat"],
-                                get_target_position=["to_lon", "to_lat"], get_source_color="color",
-                                get_target_color="color", get_width=6 if approved else 4, pickable=True))
+        # the plan's routes as curves, drawn as short straight segments; express shipments bow the other way,
+        # so they never hide a new-supplier route from the same place
+        segs = []
+        for a in r[r["kind"] != "original"].itertuples():
+            pts_c = _curve(a.from_lon, a.from_lat, a.to_lon, a.to_lat, bend=0.18 if a.kind == "switch" else -0.18)
+            segs += [{"from_lon": p0[0], "from_lat": p0[1], "to_lon": p1[0], "to_lat": p1[1],
+                      "color": a.color, "label": a.label} for p0, p1 in zip(pts_c, pts_c[1:])]
+        if segs:
+            layers.append(pdk.Layer("LineLayer", pd.DataFrame(segs), get_source_position=["from_lon", "from_lat"],
+                                    get_target_position=["to_lon", "to_lat"], get_color="color",
+                                    get_width=5 if approved else 4, pickable=True))
     lats, lons = [a for a, _ in pts], [b for _, b in pts]
     span = max(max(lats) - min(lats), max(lons) - min(lons), 1.0)
     zoom = 6.5 if span < 2 else 5.5 if span < 5 else 4.6 if span < 10 else 3.8
-    # tilt the map when there are routes, so the plan's arcs rise clear of the flat red original routes
     view = pdk.ViewState(latitude=(max(lats) + min(lats)) / 2, longitude=(max(lons) + min(lons)) / 2, zoom=zoom,
-                         pitch=40 if len(routes) else 0)
+                         pitch=0, bearing=0)
     st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_provider="carto", map_style="light",
                              tooltip={"text": "{label}"}))
+    map_legend(routes, approved)
 
 
 def customer_order_risk(result: dict) -> pd.DataFrame:
@@ -505,8 +559,7 @@ with tab_map:
     approved_name = st.session_state.get("approved_plan_name")
     if s["pos_at_risk"] == 0 or not names:
         route_map(imp["down"], pd.DataFrame(), False)
-        st.caption("No purchase order is late, so no route changes. Blue: our plant. Red: hit directly. "
-                   "Amber: down through a supplier it depends on. Grey: unaffected.")
+        st.caption("No purchase order is late, so no route changes.")
     else:
         default = approved_name if approved_name in names else next(
             (p["name"] for p in plans if p.get("recommended")), names[0])
@@ -516,16 +569,13 @@ with tab_map:
         is_approved = pick == approved_name
         r = logistics.routes(T, imp, chosen_plan)
         route_map(imp["down"], r, is_approved)
-        st.caption("**Red lines:** original routes from suppliers that are down. "
-                   + ("**Green arcs:** routes in the approved plan. " if is_approved else
-                      "**Blue arcs:** new suppliers this plan would use. **Amber arcs:** express shipments on the "
-                      "original route. ")
-                   + "Straight lines for clarity, not actual roads; hover for details.")
+        st.caption("Routes are drawn directly between supplier and plant, not along actual roads. "
+                   "Hover over a dot or route for details.")
         if len(r):
             st.dataframe(r.assign(
                 Route=r["label"],
                 Type=r["kind"].map({"original": "Original (disrupted)", "switch": "New supplier",
-                                    "expedite": "Express on original route"}),
+                                    "expedite": "Express shipment, same supplier"}),
                 **{"Road km (est.)": r["km"]})[["Type", "Route", "Road km (est.)"]],
                 hide_index=True, width="stretch")
 
