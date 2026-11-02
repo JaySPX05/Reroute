@@ -18,7 +18,8 @@ TARIFF = "Finance ministry raises basic customs duty on imported lithium-ion cel
 QUESTIONS = ["Why not switch everything to Coimbatore?",
              "Which customers should we call today?",
              "What if the flood lasts 3 more days?"]
-RERUN_WORDS = ("rerun", "re-run", "run again", "run the", "recompute", "re-simulate", "resimulate",
+RERUN_WORDS = ("rerun", "re-run", "run again", "run the", "recompute", "recalculat", "new plan run",
+               "re-simulate", "resimulate",
                "not in the facts", "facts do not", "facts don't", "missing", "don't have", "do not have")
 
 
