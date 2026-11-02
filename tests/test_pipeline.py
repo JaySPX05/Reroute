@@ -102,3 +102,12 @@ def test_model_sees_money_as_text_and_high_priority_still_late():
     assert bal["extra_cost"].startswith("Rs ") and "cost_avoided" not in bal      # delay event: no cost fields
     assert bal["high_priority_still_late"] == bal["high_priority_affected"] - bal["high_priority_protected"]
     assert g["summary"]["po_value_at_risk"].startswith("Rs ")
+
+
+def test_facts_give_totals_beyond_the_listed_changes():
+    from reroute import explain
+    res = agent.analyze_text("Finance ministry raises basic customs duty on imported lithium-ion cells from 10% to 35%.", T)
+    bal = next(p for p in explain.facts(res["impact"], res["plans"])["plans"] if p["name"] == "Balanced")
+    acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
+    assert bal["units_switched"] == int(acts[acts["action"] == "switch"]["qty"].sum())
+    assert bal["changes_total"] >= len(bal["changes"])
