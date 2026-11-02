@@ -6,7 +6,9 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from reroute import agent, config, db, explain, impact, llm, planner, signals
+import pydeck as pdk
+
+from reroute import agent, config, db, explain, impact, llm, logistics, planner, signals
 
 st.set_page_config(page_title="ReRoute", layout="wide")
 st.markdown(
@@ -125,6 +127,50 @@ def network_map(down: pd.DataFrame | None = None):
     pts = pd.concat([sup[["lat", "lon", "color", "size"]], plant])
     st.map(pts, latitude="lat", longitude="lon", color="color", size="size")
     st.caption("Blue: our plant (Bidadi). Red: hit directly. Amber: down through a supplier it depends on. Grey: unaffected.")
+
+
+ROUTE_COLORS = {"original": [214, 40, 40], "switch": [31, 111, 235], "expedite": [244, 161, 0]}
+APPROVED_COLOR = [46, 139, 87]
+
+
+def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
+    """Suppliers and plant as dots; disrupted original routes as red lines; the plan's routes as arcs."""
+    sup = T["suppliers"].copy()
+    status = dict(zip(down["supplier_id"], down["via"])) if len(down) else {}
+    sup["color"] = sup["supplier_id"].map(lambda s: [138, 148, 166] if s not in status else
+                                          [214, 40, 40] if status[s] == "hit directly" else [244, 161, 0])
+    sup["n"] = sup.groupby("city").cumcount()            # same small spread as network_map, so lines meet the dots
+    sup["lat"] = sup["lat"] + sup["n"] * 0.04
+    sup["label"] = sup["name"] + " (" + sup["city"] + ")" + sup["supplier_id"].map(
+        lambda s: "" if s not in status else f": {status[s]}")
+    p = logistics.plant(T)
+    plant_df = pd.DataFrame([{**p, "label": f"Our plant: {p['name']}"}])
+    layers = [pdk.Layer("ScatterplotLayer", sup, get_position=["lon", "lat"], get_fill_color="color",
+                        get_radius=9000, radius_min_pixels=5, pickable=True),
+              pdk.Layer("ScatterplotLayer", plant_df, get_position=["lon", "lat"], get_fill_color=[31, 111, 235],
+                        get_radius=14000, radius_min_pixels=8, pickable=True)]
+    pts = [(p["lat"], p["lon"])]
+    if len(routes):
+        r = routes.copy()
+        pos = sup.set_index("supplier_id")
+        r["from_lat"] = r["supplier_id"].map(pos["lat"])
+        r["from_lon"] = r["supplier_id"].map(pos["lon"])
+        r["color"] = r["kind"].map(lambda k: APPROVED_COLOR if approved and k != "original" else ROUTE_COLORS[k])
+        pts += list(zip(r["from_lat"], r["from_lon"]))
+        layers.append(pdk.Layer("LineLayer", r[r["kind"] == "original"], get_source_position=["from_lon", "from_lat"],
+                                get_target_position=["to_lon", "to_lat"], get_color="color", get_width=4, pickable=True))
+        new = r[r["kind"] != "original"]
+        layers.append(pdk.Layer("ArcLayer", new, get_source_position=["from_lon", "from_lat"],
+                                get_target_position=["to_lon", "to_lat"], get_source_color="color",
+                                get_target_color="color", get_width=6 if approved else 4, pickable=True))
+    lats, lons = [a for a, _ in pts], [b for _, b in pts]
+    span = max(max(lats) - min(lats), max(lons) - min(lons), 1.0)
+    zoom = 6.5 if span < 2 else 5.5 if span < 5 else 4.6 if span < 10 else 3.8
+    # tilt the map when there are routes, so the plan's arcs rise clear of the flat red original routes
+    view = pdk.ViewState(latitude=(max(lats) + min(lats)) / 2, longitude=(max(lons) + min(lons)) / 2, zoom=zoom,
+                         pitch=40 if len(routes) else 0)
+    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_provider="carto", map_style="light",
+                             tooltip={"text": "{label}"}))
 
 
 def customer_order_risk(result: dict) -> pd.DataFrame:
@@ -342,6 +388,12 @@ with tab_plan:
                 )
                 c4.metric("Purchase orders changed", t["pos_changed"])
 
+                b = logistics.cost_breakdown(T, imp, p)
+                st.caption(f"Total including estimated shipping: **{explain.inr(b['total_with_shipping'])}** "
+                           f"(shipping change {explain.inr(b['shipping_change'])})")
+                with st.expander("Cost breakdown", expanded=p["name"] == st.session_state.get("approved_plan_name")):
+                    st.dataframe(logistics.breakdown_table(b, explain.inr), hide_index=True, width="stretch")
+
                 if st.button(
                     f"Approve {p['name']}",
                     key=f"approve-{p['name']}",
@@ -350,7 +402,9 @@ with tab_plan:
                     n = agent.approve(res, p["name"])
                     st.session_state.approved_plan_name = p["name"]
                     st.success(
-                        f"Approved. {n} PO changes queued and supplier messages drafted."
+                        f"Approved. {n} PO changes queued and supplier messages drafted. "
+                        f"Total including estimated shipping: {explain.inr(b['total_with_shipping'])}. "
+                        "See the Map tab for the new routes and Approved actions for the breakdown."
                     )
 
         for p in plans:
@@ -446,7 +500,33 @@ with tab_risk:
             height=max(320, min(760, 25 * len(chart_orders)))), width="stretch")
 
 with tab_map:
-    network_map(imp["down"])
+    names = [p["name"] for p in plans]
+    approved_name = st.session_state.get("approved_plan_name")
+    if s["pos_at_risk"] == 0 or not names:
+        route_map(imp["down"], pd.DataFrame(), False)
+        st.caption("No purchase order is late, so no route changes. Blue: our plant. Red: hit directly. "
+                   "Amber: down through a supplier it depends on. Grey: unaffected.")
+    else:
+        default = approved_name if approved_name in names else next(
+            (p["name"] for p in plans if p.get("recommended")), names[0])
+        pick = st.radio("Show the routes for", names, index=names.index(default), horizontal=True,
+                        format_func=lambda n: f"{n} (approved)" if n == approved_name else n)
+        chosen_plan = next(p for p in plans if p["name"] == pick)
+        is_approved = pick == approved_name
+        r = logistics.routes(T, imp, chosen_plan)
+        route_map(imp["down"], r, is_approved)
+        st.caption("**Red lines:** original routes from suppliers that are down. "
+                   + ("**Green arcs:** routes in the approved plan. " if is_approved else
+                      "**Blue arcs:** new suppliers this plan would use. **Amber arcs:** express shipments on the "
+                      "original route. ")
+                   + "Straight lines for clarity, not actual roads; hover for details.")
+        if len(r):
+            st.dataframe(r.assign(
+                Route=r["label"],
+                Type=r["kind"].map({"original": "Original (disrupted)", "switch": "New supplier",
+                                    "expedite": "Express on original route"}),
+                **{"Road km (est.)": r["km"]})[["Type", "Route", "Road km (est.)"]],
+                hide_index=True, width="stretch")
 
 with tab_ask:
     st.caption("Ask about this disruption, for example: Why not switch everything to Coimbatore? Which customers should we call?")
@@ -461,6 +541,28 @@ with tab_ask:
         st.chat_message("assistant").write(ans)
 
 with tab_done:
+    approved_name = st.session_state.get("approved_plan_name")
+    approved_plan = next((p for p in plans if p["name"] == approved_name), None)
+    if approved_plan is not None:
+        st.subheader(f"Approved plan: {approved_name}")
+        st.dataframe(logistics.breakdown_table(logistics.cost_breakdown(T, imp, approved_plan), explain.inr),
+                     hide_index=True, width="stretch")
+        lines = logistics.plan_lines(T, imp, approved_plan)
+        changed = lines[lines["action"] != "wait"] if len(lines) else lines
+        if len(changed):
+            st.caption("Per purchase order (shipping is an estimate: one truck per PO, road km = straight-line x "
+                       f"{config.ROAD_FACTOR})")
+            money = ["price_difference", "new_supplier_checks", "expedite_fee", "shipping_change", "planner_extra_cost"]
+            view = changed.assign(**{c: changed[c].map(explain.inr) for c in money})
+            st.dataframe(view[["po_id", "action", "from_supplier", "to_supplier", "qty", "km_before", "km_after",
+                               *money]].rename(columns={
+                "po_id": "PO", "action": "Action", "from_supplier": "From", "to_supplier": "To", "qty": "Qty",
+                "km_before": "Road km before", "km_after": "Road km after", "price_difference": "Price difference",
+                "new_supplier_checks": "New-supplier checks", "expedite_fee": "Expedite fee",
+                "shipping_change": "Shipping change", "planner_extra_cost": "Extra cost (planner)"}),
+                hide_index=True, width="stretch")
+        st.divider()
+        st.subheader("All approved changes")
     done = db.read_rows("plan_actions")
     if done.empty:
         st.write("Nothing approved yet.")

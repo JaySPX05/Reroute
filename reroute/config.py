@@ -44,5 +44,10 @@ S4_SANDBOX_BASE = os.getenv(
 AUTO_COST_LIMIT_INR = float(os.getenv("AUTO_COST_LIMIT_INR", "100000"))      # extra cost vs doing nothing
 BIG_SWITCH_LIMIT_INR = float(os.getenv("BIG_SWITCH_LIMIT_INR", "5000000"))   # order value moved to another supplier
 
+# Shipping estimate for the cost breakdown (assumed rates; shown to the planner, not used to rank plans)
+FREIGHT_RS_PER_KM = float(os.getenv("FREIGHT_RS_PER_KM", "40"))                  # one standard truckload
+EXPRESS_FREIGHT_RS_PER_KM = float(os.getenv("EXPRESS_FREIGHT_RS_PER_KM", "70"))  # one express truckload
+ROAD_FACTOR = float(os.getenv("ROAD_FACTOR", "1.3"))                             # road km per straight-line km
+
 # How the ranking weighs the three goals in the "Balanced" plan (must add to 1)
 WEIGHTS_BALANCED = {"cost": 0.25, "delay": 0.40, "service": 0.35}
