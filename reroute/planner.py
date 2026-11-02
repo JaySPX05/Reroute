@@ -100,12 +100,16 @@ def _capacity_note(po, sm, spare, booked, sup_names, only: str = "") -> str:
         taken = booked.get((a.supplier_id, po.material_id), [])
         why = f"Not switched to {sup_names.get(a.supplier_id, a.supplier_id)}: needs {int(po.qty)}, only {int(left)} spare left"
         if taken:
-            why += " (" + ", ".join(f"{q} booked for PO {pid}" for pid, q in taken) + ")"
+            why += " (" + ", ".join(f"{q} booked for PO {pid}" + (f" in {where}" if where else "")
+                                    for pid, q, where in taken) + ")"
         notes.append(why + ".")
     return " ".join(notes)
 
 
-def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
+def build_plan(impact: dict, tables, name: str, weights: dict, booked_before: dict | None = None) -> dict:
+    """booked_before = {(supplier_id, material_id): [(po_id, qty, event_label)]}: spare capacity that
+    earlier disruptions in the same run already took. It is subtracted before planning, so two
+    disruptions never promise the same parts."""
     today = as_of(tables)
     pos = impact["pos"].copy()
     if pos.empty:
@@ -118,6 +122,9 @@ def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
     spare = {}
     for r in sm.itertuples():
         spare[(r.supplier_id, r.material_id)] = r.weekly_capacity * r.spare_share * weeks
+    for key, taken in (booked_before or {}).items():
+        if key in spare:
+            spare[key] = max(0.0, spare[key] - sum(q for _, q, _ in taken))
     pos["prio_rank"] = pos["so_priority"].map({"High": 0, "Medium": 1, "Low": 2})
     if weeks > 1:
         # cost shock: nothing is late, so give the cheaper capacity to the orders that have time to move
@@ -127,7 +134,9 @@ def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
         pos = pos.sort_values(["prio_rank", "due", "po_id"])
 
     sup_names = tables["suppliers"].set_index("supplier_id")["name"]
-    booked = {}   # (supplier_id, material_id) -> [(po_id, qty)] already given to earlier POs in this plan
+    # (supplier_id, material_id) -> [(po_id, qty, where)]: capacity already given to other POs
+    booked = {k: [(pid, q, f"an earlier disruption ({lab})") for pid, q, lab in v]
+              for k, v in (booked_before or {}).items()}
     chosen = []
     for po in pos.itertuples():
         opts = _options(po, today, tables, down_days, spare)
@@ -139,7 +148,7 @@ def build_plan(impact: dict, tables, name: str, weights: dict) -> dict:
                 if ideal["action"] == "switch" and best["alt_supplier_id"] != ideal["alt_supplier_id"] else "")
         if best["action"] == "switch":
             spare[(best["alt_supplier_id"], po.material_id)] -= po.qty
-            booked.setdefault((best["alt_supplier_id"], po.material_id), []).append((po.po_id, int(po.qty)))
+            booked.setdefault((best["alt_supplier_id"], po.material_id), []).append((po.po_id, int(po.qty), ""))
         chosen.append({
             "po_id": po.po_id, "sales_order_id": po.for_sales_order_id, "so_priority": po.so_priority,
             "material": po.material, "qty": int(po.qty), "from_supplier": po.supplier,
@@ -182,8 +191,8 @@ def _totals(impact, actions) -> dict:
     }
 
 
-def build_plans(impact: dict, tables) -> list:
-    plans = [build_plan(impact, tables, name, w) for name, w in PLAN_WEIGHTS.items()]
+def build_plans(impact: dict, tables, booked_before: dict | None = None) -> list:
+    plans = [build_plan(impact, tables, name, w, booked_before) for name, w in PLAN_WEIGHTS.items()]
     for p in plans:
         p["recommended"] = p["name"] == "Balanced"
     return plans
