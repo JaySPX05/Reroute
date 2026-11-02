@@ -115,6 +115,7 @@ SIM_STATE_DEFAULTS = {
     "sim_status": "Ready",
     "sim_started_at": None,
     "sim_elapsed": 0.0,
+    "sim_processing": 0.0,            # seconds the agents themselves spent, without the display delay
     "sim_scenario_keys": [],
     "sim_scenario_index": 0,
     "sim_message_iter": None,
@@ -133,10 +134,10 @@ def show_simulation_metrics(net, slots):
     all_plans = ([plan for event in net.events.values() for plan in event.get("plans", [])]
                  if net else [])
     alternatives = sum(not plan.get("recommended", False) for plan in all_plans)
-    recommended = any(plan.get("recommended", False) for plan in all_plans)
-    slots[0].metric("Total elapsed time", f"{elapsed:.1f} s")
-    slots[1].metric("Alternative plans generated", alternatives)
-    slots[2].metric("Recommended plan", "Available" if recommended else "Not available")
+    # wall-clock time includes the "seconds per agent message" pause; show the agents' own time separately
+    slots[0].metric("Run time (incl. display delay)", f"{elapsed:.1f} s")
+    slots[1].metric("Agent processing time", f"{st.session_state.sim_processing * 1000:.0f} ms")
+    slots[2].metric("Alternative plans generated", alternatives)
     slots[3].metric("Simulation status", status)
 
 
@@ -172,6 +173,7 @@ if start:
     st.session_state.sim_current_label = ""
     st.session_state.sim_started_at = time.perf_counter()
     st.session_state.sim_elapsed = 0.0
+    st.session_state.sim_processing = 0.0
     st.session_state.sim_status = "Running"
 
 if stop and st.session_state.sim_status == "Running":
@@ -180,6 +182,10 @@ if stop and st.session_state.sim_status == "Running":
     st.session_state.sim_status = "Stopped"
     st.session_state.sim_message_iter = None
     st.session_state.last = None
+    stopped_net = st.session_state.get("net")
+    if stopped_net:
+        # drop undelivered messages, so a later approval doesn't quietly finish the stopped disruption
+        stopped_net.queue.clear()
 
 # ------------------------------------------------------------------ layout
 st.title("ReRoute agent network")
@@ -227,7 +233,9 @@ if net and st.session_state.sim_status == "Running":
             st.session_state.sim_message_iter = message_iter
 
         try:
+            t0 = time.perf_counter()
             message = next(message_iter)
+            st.session_state.sim_processing += time.perf_counter() - t0
         except StopIteration:
             st.session_state.sim_message_iter = None
             st.session_state.sim_scenario_index = scenario_index + 1

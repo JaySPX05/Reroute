@@ -75,7 +75,8 @@ else:
     if reports.empty:
         st.sidebar.info("No supplier reports yet. Open the Supplier report page to send one.")
     else:
-        last = reports.iloc[-1].to_dict()
+        # HANA returns rows in no fixed order, so sort by time before taking the newest
+        last = reports.sort_values("created_at").iloc[-1].to_dict()
         name = T["suppliers"].set_index("supplier_id").loc[last["supplier_id"], "name"]
         st.sidebar.write(f"**{name}**: {last['issue_type']}, {last['days_down']} days. {last['note']}")
         if st.sidebar.button("Analyse", type="primary"):
@@ -140,10 +141,21 @@ def customer_order_risk(result: dict) -> pd.DataFrame:
     return orders
 
 
-def show_received_supplier_reports():
-    """Show persisted supplier reports without depending on this browser session."""
-    st.subheader("Received Supplier Reports")
+def show_received_supplier_reports(collapsed: bool = False):
+    """Show persisted supplier reports without depending on this browser session.
+
+    collapsed=True puts the table in a closed expander, so it doesn't push analysis results down the page.
+    """
     reports = db.read_rows("supplier_reports")
+    if collapsed:
+        with st.expander(f"Received supplier reports ({len(reports)})", expanded=False):
+            _reports_table(reports)
+    else:
+        st.subheader("Received Supplier Reports")
+        _reports_table(reports)
+
+
+def _reports_table(reports: pd.DataFrame):
     if reports.empty:
         st.info("No supplier reports received yet.")
         return
@@ -157,16 +169,12 @@ def show_received_supplier_reports():
         "days_down": "Expected disruption duration (days)",
         "created_at": "Submission timestamp",
     })
-    view["Source"] = "Supplier Report page (Phone/Web)"
-    view["Status"] = "Received"
     st.dataframe(
         view[[
             "Supplier name",
             "Reported issue",
             "Expected disruption duration (days)",
             "Submission timestamp",
-            "Source",
-            "Status",
         ]],
         hide_index=True,
         width="stretch",
@@ -190,7 +198,7 @@ st.caption("Kaveri EV Motors · Supply Chain Resilience")
 st.caption(f"{ev.text}  \nDetected by: {ev.method} · expected {ev.duration_days} days · severity {ev.severity}/5 · "
            f"{res['timings_ms']['total']:.0f} ms from signal to plan")
 
-show_received_supplier_reports()
+show_received_supplier_reports(collapsed=True)
 
 if not ev.relevant or not ev.matched:
     st.info("This signal doesn't touch any supplier in our network, so there is nothing to replan.")
