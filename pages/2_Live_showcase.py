@@ -11,21 +11,386 @@ import streamlit as st
 
 from reroute import config, db, explain, llm, network
 
-st.set_page_config(page_title="Live showcase · ReRoute", layout="wide")
+st.set_page_config(page_title="Live showcase · ReRoute", layout="wide", initial_sidebar_state="collapsed")
+_theme_context = getattr(getattr(st, "context", None), "theme", None)
+LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
+palette = {
+    "page": "#E7EFEE" if LIGHT_MODE else "#061820",
+    "panel": "#FFFFFF" if LIGHT_MODE else "#0B2C36",
+    "panel_soft": "#F0F7F5" if LIGHT_MODE else "#103743",
+    "text": "#0B2932" if LIGHT_MODE else "#E8F4F6",
+    "muted": "#547078" if LIGHT_MODE else "#B0C7CE",
+    "accent": "#007E8A" if LIGHT_MODE else "#00D9E8",
+    "on_accent": "#FFFFFF" if LIGHT_MODE else "#03262B",
+    "teal": "#087F73" if LIGHT_MODE else "#20C6B7",
+    "border": "rgba(0, 126, 138, .30)" if LIGHT_MODE else "rgba(0, 217, 232, .28)",
+    "danger": "#C13F55" if LIGHT_MODE else "#FF5C70",
+    "warning": "#8A5600" if LIGHT_MODE else "#F4B942",
+    "success": "#187A5B" if LIGHT_MODE else "#32D296",
+    "sidebar": "#E0ECEA" if LIGHT_MODE else "#041319",
+    "sidebar_text": "#18363D" if LIGHT_MODE else "#C5D8DC",
+    "card": "#FFFFFF" if LIGHT_MODE else "#0B2831",
+}
 st.markdown(
-    """<style>
-    [data-testid="stSidebarNav"]::before {
-        content: "TechTitans\\A ReRoute | Supply Chain Resilience Platform";
-        display: block;
-        white-space: pre-line;
-        margin: 0.5rem 1rem 0.75rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid var(--secondary-background-color);
-        font-size: 1.15rem;
-        line-height: 1.55;
-        color: var(--text-color);
-    }
-    </style>""",
+    f"""<style>
+:root {{
+    --rr-page: var(--st-background-color, {palette["page"]});
+    --rr-panel: var(--st-secondary-background-color, {palette["panel"]});
+    --rr-panel-soft: color-mix(in srgb, var(--rr-panel) 76%, var(--rr-page));
+    --rr-text: var(--st-text-color, {palette["text"]});
+    --rr-muted: color-mix(in srgb, var(--rr-text) 68%, var(--rr-panel));
+    --rr-accent: color-mix(in srgb, var(--rr-text) 58%, #00D9E8 42%);
+    --rr-button-bg: #006B75;
+    --rr-button-text: #FFFFFF;
+    --rr-teal: #20C6B7;
+    --rr-border: var(--st-border-color, {palette["border"]});
+    --rr-danger: var(--st-red-color, {palette["danger"]});
+    --rr-warning: var(--st-yellow-color, {palette["warning"]});
+    --rr-success: var(--st-green-color, {palette["success"]});
+    --rr-sidebar: var(--st-secondary-background-color, {palette["sidebar"]});
+    --rr-sidebar-text: var(--st-text-color, {palette["sidebar_text"]});
+    --rr-card: var(--st-secondary-background-color, {palette["card"]});
+}}
+.stApp, [data-testid="stAppViewContainer"] {{
+    background-color: var(--rr-page);
+    background-image:
+        radial-gradient(ellipse at 52% -14%, color-mix(in srgb, var(--rr-accent) 12%, transparent), transparent 48%),
+        linear-gradient(135deg, color-mix(in srgb, var(--rr-teal) 4%, transparent), transparent 55%);
+    color: var(--rr-text);
+    font-family: "Avenir Next", "Bahnschrift", "Segoe UI", sans-serif;
+}}
+[data-testid="stMainBlockContainer"], .main .block-container {{
+    max-width: 1680px;
+    padding: 1.05rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;
+}}
+[data-testid="stHeader"] {{ background: transparent; }}
+[data-testid="stMainBlockContainer"] > div {{ animation: rr-arrive .42s ease-out both; }}
+@keyframes rr-arrive {{ from {{ opacity: 0; transform: translateY(5px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+h1, h2, h3, h4 {{
+    color: var(--rr-text);
+    font-family: "Bahnschrift", "Avenir Next", "Segoe UI", sans-serif;
+    letter-spacing: -.035em;
+}}
+h1 {{ font-size: clamp(1.7rem, 2.7vw, 2.35rem); font-weight: 700; }}
+h2, h3 {{ font-weight: 650; }}
+p, [data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"] {{ color: var(--rr-muted); }}
+section[data-testid="stSidebar"] {{
+    background: var(--rr-sidebar);
+    border-right: 1px solid var(--rr-border);
+}}
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{ padding-top: .65rem; }}
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: var(--rr-sidebar-text); }}
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"]::before {{
+    content: "ReRoute";
+    display: block;
+    margin: .45rem 1rem .85rem;
+    padding: .15rem 0 .75rem;
+    border-bottom: 1px solid var(--rr-border);
+    font-family: "Bahnschrift", "Avenir Next", sans-serif;
+    font-size: 1.45rem;
+    font-weight: 750;
+    letter-spacing: -.04em;
+    color: var(--rr-text);
+}}
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a {{
+    border-radius: 5px;
+    margin: .12rem .45rem;
+    color: var(--rr-sidebar-text);
+    transition: background-color .16s ease, border-color .16s ease;
+}}
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a:hover {{
+    background: color-mix(in srgb, var(--rr-accent) 12%, transparent);
+}}
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="page"] {{
+    background: color-mix(in srgb, var(--rr-accent) 15%, transparent);
+    color: var(--rr-text);
+    border-left: 2px solid var(--rr-accent);
+}}
+[data-testid="stVerticalBlockBorderWrapper"] {{
+    border: 1px solid var(--rr-border) !important;
+    border-radius: 7px !important;
+    background: var(--rr-panel);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
+    transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}}
+[data-testid="stVerticalBlockBorderWrapper"]:hover {{
+    border-color: var(--rr-accent) !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, .11);
+}}
+[data-testid="stMetric"] {{
+    min-height: 92px;
+    padding: .7rem .85rem;
+    border: 1px solid var(--rr-border);
+    border-left: 2px solid var(--rr-accent);
+    border-radius: 5px;
+    background: var(--rr-panel);
+}}
+[data-testid="stMetricLabel"] {{
+    color: var(--rr-muted);
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}}
+[data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; }}
+[data-testid="stMetricDelta"] {{ font-size: .75rem; }}
+.rr-workflow {{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: stretch;
+    gap: .45rem;
+    margin: .45rem 0 1rem;
+}}
+.rr-flow-step {{
+    min-width: 0;
+    padding: .62rem .72rem;
+    border: 1px solid var(--rr-border);
+    border-left: 3px solid var(--rr-border);
+    border-radius: 4px;
+    background: var(--rr-panel);
+    transition: border-color .16s ease, background-color .16s ease;
+}}
+@media (hover: hover) {{
+    .rr-flow-step:hover {{
+        border-color: var(--rr-accent);
+        background: color-mix(in srgb, var(--rr-panel) 94%, var(--rr-accent));
+    }}
+}}
+.rr-flow-step.is-done {{ border-left-color: var(--rr-success); }}
+.rr-flow-step.is-current {{ border-left-color: var(--rr-accent); }}
+.rr-flow-heading {{ display: flex; align-items: center; gap: .45rem; color: var(--rr-text); }}
+.rr-flow-number {{ color: var(--rr-muted); font-size: .65rem; font-weight: 750; letter-spacing: .07em; }}
+.rr-flow-heading strong {{ font-size: .82rem; }}
+.rr-flow-state {{ display: block; margin: .28rem 0 0 1.8rem; color: var(--rr-muted); font-size: .72rem; line-height: 1.3; }}
+.rr-flow-arrow {{ align-self: center; color: var(--rr-accent); font-size: 1.1rem; font-weight: 700; }}
+.rr-operational-strip {{
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: .45rem 0 .8rem;
+    border: 1px solid var(--rr-border);
+    border-radius: 4px;
+}}
+.rr-operational-item {{ min-width: 0; padding: .68rem .82rem; }}
+.rr-operational-item + .rr-operational-item {{ border-left: 1px solid var(--rr-border); }}
+.rr-operational-label {{ color: var(--rr-muted); font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }}
+.rr-operational-value {{ margin-top: .18rem; color: var(--rr-text); font-size: 1.2rem; font-weight: 750; line-height: 1.2; }}
+.rr-operational-note {{ margin-top: .2rem; color: var(--rr-muted); font-size: .72rem; line-height: 1.25; }}
+.rr-section-kicker {{ margin: .15rem 0 .12rem; color: var(--rr-accent); font-size: .66rem; font-weight: 750; letter-spacing: .11em; text-transform: uppercase; }}
+.rr-form-step {{ margin: .55rem 0 .35rem; padding-top: .45rem; border-top: 1px solid var(--rr-border); color: var(--rr-accent); font-size: .68rem; font-weight: 750; letter-spacing: .1em; }}
+@media (max-width: 760px) {{
+    .rr-workflow {{ grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }}
+    .rr-flow-arrow {{ display: none; }}
+    .rr-operational-strip {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    .rr-operational-item:nth-child(3) {{ border-left: 0; border-top: 1px solid var(--rr-border); }}
+    .rr-operational-item:nth-child(4) {{ border-top: 1px solid var(--rr-border); }}
+}}
+[data-testid="stDataFrame"], [data-testid="stTable"], [data-testid="stVegaLiteChart"],
+[data-testid="stMap"], [data-testid="stGraphVizChart"] {{
+    border: 1px solid var(--rr-border);
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--rr-panel);
+}}
+[data-testid="stAlert"] {{
+    border-radius: 4px;
+    border: 1px solid var(--rr-border);
+    background: var(--rr-panel-soft);
+}}
+[data-testid="stTabs"] {{ border-bottom: 1px solid var(--rr-border); }}
+[data-testid="stTabs"] button {{
+    color: var(--rr-muted);
+    font-size: .82rem;
+    font-weight: 650;
+}}
+[data-testid="stTabs"] button {{
+    border-radius: 3px 3px 0 0;
+    transition: color .14s ease, background-color .14s ease, border-color .14s ease;
+}}
+[data-testid="stTabs"] button:hover {{
+    color: var(--rr-text);
+    background: color-mix(in srgb, var(--rr-panel-soft) 82%, var(--rr-accent));
+}}
+[data-testid="stTabs"] button[aria-selected="true"] {{
+    color: var(--rr-accent);
+    background: color-mix(in srgb, var(--rr-panel-soft) 90%, var(--rr-accent));
+    border-bottom-color: var(--rr-accent);
+}}
+[data-testid="stButton"] button, [data-testid="stDownloadButton"] button {{
+    color: var(--rr-text);
+    background: var(--rr-panel-soft);
+    border: 1px solid var(--rr-border);
+    border-radius: 4px;
+    font-weight: 700;
+    transition: background-color .14s ease, color .14s ease, border-color .14s ease;
+}}
+[data-testid="stButton"] button[kind="primary"],
+[data-testid="stFormSubmitButton"],
+[data-testid="stFormSubmitButton"] button {{
+    background: #006B75 !important;
+    border-color: #006B75 !important;
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}}
+[data-testid="stButton"] button[kind="primary"]:hover,
+[data-testid="stFormSubmitButton"]:hover,
+[data-testid="stFormSubmitButton"] button:hover {{
+    background: #005761 !important;
+    border-color: #005761 !important;
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}}
+[data-testid="stButton"] button[kind="primary"]:active,
+[data-testid="stFormSubmitButton"]:active,
+[data-testid="stFormSubmitButton"] button:active {{
+    background: #004B53 !important;
+    border-color: #004B53 !important;
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}}
+[data-testid="stButton"] button[kind="primary"]:focus-visible,
+[data-testid="stFormSubmitButton"]:focus-visible,
+[data-testid="stFormSubmitButton"] button:focus-visible {{
+    outline: 2px solid var(--rr-accent) !important;
+    outline-offset: 2px;
+}}
+[data-testid="stButton"] button[kind="primary"]:disabled,
+[data-testid="stFormSubmitButton"]:disabled,
+[data-testid="stFormSubmitButton"] button:disabled {{
+    background: #526F73 !important;
+    border-color: #526F73 !important;
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+    opacity: 1 !important;
+    cursor: not-allowed;
+}}
+[data-testid="stButton"] button:not([kind="primary"]):hover,
+[data-testid="stDownloadButton"] button:hover {{
+    color: var(--rr-text);
+    background: color-mix(in srgb, var(--rr-panel-soft) 86%, var(--rr-accent));
+    border-color: var(--rr-accent);
+}}
+[data-testid="stButton"] button:disabled,
+[data-testid="stDownloadButton"] button:disabled {{
+    color: var(--rr-muted);
+    -webkit-text-fill-color: var(--rr-muted);
+    background: var(--rr-panel-soft);
+    border-color: var(--rr-border);
+    opacity: 1;
+    cursor: not-allowed;
+}}
+[data-testid="stDataFrame"] tbody tr:hover,
+[data-testid="stTable"] tbody tr:hover {{
+    background-color: color-mix(in srgb, var(--rr-panel-soft) 84%, var(--rr-accent));
+}}
+[data-testid="stSelectbox"] [role="combobox"],
+[data-testid="stMultiSelect"] [role="combobox"],
+[data-testid="stCheckbox"] label,
+[data-testid="stRadio"] label {{
+    transition: background-color .14s ease, border-color .14s ease, color .14s ease;
+}}
+@media (hover: hover) {{
+    [data-testid="stSelectbox"] [role="combobox"]:hover,
+    [data-testid="stMultiSelect"] [role="combobox"]:hover,
+    [data-testid="stCheckbox"] label:hover,
+    [data-testid="stRadio"] label:hover {{
+        border-color: var(--rr-accent);
+        color: var(--rr-text);
+    }}
+}}
+[data-testid="stExpander"] details {{
+    border: 1px solid var(--rr-border);
+    border-radius: 5px;
+    background: var(--rr-panel);
+}}
+[data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] [role="combobox"] {{
+    color: var(--rr-text);
+    background: var(--rr-panel-soft);
+    border-color: var(--rr-border);
+    border-radius: 4px;
+}}
+[data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {{
+    color: var(--rr-text);
+    background: var(--rr-panel-soft);
+}}
+[data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea, [data-testid="stChatInput"] textarea,
+[data-testid="stSelectbox"] [role="combobox"] {{
+    color: var(--rr-text) !important;
+    -webkit-text-fill-color: var(--rr-text);
+    background: var(--rr-panel-soft) !important;
+    border-color: var(--rr-border) !important;
+}}
+input::placeholder, textarea::placeholder {{
+    color: var(--rr-muted) !important;
+    opacity: 1;
+}}
+[data-baseweb="popover"], [data-baseweb="menu"], [role="listbox"],
+[role="option"], [role="tooltip"], [data-baseweb="tooltip"] {{
+    color: var(--rr-text) !important;
+    background-color: var(--rr-panel-soft) !important;
+    border-color: var(--rr-border) !important;
+}}
+[role="option"]:hover, [role="option"][aria-selected="true"] {{
+    color: var(--rr-text) !important;
+    background-color: var(--rr-panel) !important;
+}}
+[data-testid="stTooltipContent"] {{
+    color: var(--rr-text) !important;
+    background: var(--rr-panel-soft) !important;
+    border: 1px solid var(--rr-border);
+}}
+.vega-tooltip {{
+    color: var(--rr-text) !important;
+    background: var(--rr-panel-soft) !important;
+    border: 1px solid var(--rr-border) !important;
+}}
+.vega-tooltip table, .vega-tooltip th, .vega-tooltip td {{
+    color: var(--rr-text) !important;
+    background: var(--rr-panel-soft) !important;
+}}
+[data-testid="stCheckbox"] label, [data-testid="stRadio"] label {{
+    color: var(--rr-text);
+}}
+a {{ color: var(--rr-accent); }}
+[data-testid="stMarkdownContainer"] {{ color: var(--rr-text); }}
+[data-testid="stMarkdownContainer"] p, [data-testid="stCaptionContainer"] {{
+    color: var(--rr-muted);
+}}
+[data-testid="stMarkdownContainer"] code, [data-testid="stCode"] {{
+    color: var(--rr-text);
+    background: var(--rr-panel-soft);
+}}
+[data-testid="stAlert"] [data-testid="stMarkdownContainer"],
+[data-testid="stAlert"] p {{
+    color: var(--rr-text);
+}}
+[data-testid="stDataFrame"], [data-testid="stTable"] {{
+    color: var(--rr-text);
+    color-scheme: inherit;
+}}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {{
+    color: var(--rr-sidebar-text);
+}}
+[data-testid="stSidebarCollapsedControl"] button {{
+    border: 1px solid var(--rr-border);
+    border-radius: 4px;
+    background: var(--rr-panel);
+}}
+hr {{ border-color: var(--rr-border); }}
+:focus-visible {{ outline: 2px solid var(--rr-accent) !important; outline-offset: 2px; }}
+@media (max-width: 800px) {{
+    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: .8rem .7rem 1.5rem; }}
+    [data-testid="stMetric"] {{ min-height: 78px; padding: .55rem; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{ animation-duration: .01ms !important; transition-duration: .01ms !important; }}
+}}
+</style>""",
     unsafe_allow_html=True,
 )
 
@@ -57,21 +422,25 @@ def tables():
 
 def graph_dot(active=None) -> str:
     sender, recipient = active if active else (None, None)
+    node_fill = "#F4FCFC" if LIGHT_MODE else "#0D303B"
+    node_text = palette["text"]
+    node_border = palette["accent"]
+    edge_color = palette["muted"]
     lines = ['digraph G {', 'rankdir=TB; bgcolor="transparent"; nodesep=0.5; ranksep=0.32;',
-             'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=16, margin="0.12,0.06", '
-             'color="#8a94a6", fillcolor="#eef1f6", fontcolor="#1a2233"];',
-             'edge [color="#8a94a6", arrowsize=0.8];']
+             f'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=16, margin="0.12,0.06", color="{node_border}", fillcolor="{node_fill}", fontcolor="{node_text}"];',
+             f'edge [color="{edge_color}", arrowsize=0.8];']
     for key, (name, role) in network.AGENTS.items():
-        fill = "#ffb627" if key == recipient else "#7fc4ff" if key == sender else (
-            "#e7e2ff" if key == "planner" else "#eef1f6")
+        fill = ("#F4B942" if LIGHT_MODE else "#9E7020") if key == recipient else (
+            "#20C6B7" if LIGHT_MODE else "#087D86") if key == sender else (
+            ("#D9F2E7" if LIGHT_MODE else "#145241") if key == "planner" else node_fill)
         pen = 2.5 if key in (sender, recipient) else 1
         lines.append(f'{key} [label=<<b>{name}</b><br/><font point-size="12">{role}</font>>, '
-                     f'fillcolor="{fill}", penwidth={pen}];')
+                     f'fillcolor="{fill}", color="{node_border}", fontcolor="{node_text}", penwidth={pen}];')
     for a, b in EDGES:
         hot = (a, b) == (sender, recipient)
-        lines.append(f'{a} -> {b} [color="{"#d62828" if hot else "#8a94a6"}", penwidth={3 if hot else 1}];')
+        lines.append(f'{a} -> {b} [color="{"#FF5C70" if hot and not LIGHT_MODE else "#C13F55" if hot else edge_color}", penwidth={3 if hot else 1}];')
     if active and (sender, recipient) not in EDGES:
-        lines.append(f'{sender} -> {recipient} [color="#d62828", penwidth=3, style=dashed];')
+        lines.append(f'{sender} -> {recipient} [color="{("#C13F55" if LIGHT_MODE else "#FF5C70")}", penwidth=3, style=dashed];')
     lines.append('{rank=same; policy; planner;}')
     lines.append("}")
     return "\n".join(lines)
@@ -142,19 +511,10 @@ def show_simulation_metrics(net, slots):
     slots[3].metric("Simulation status", status)
 
 
-# ------------------------------------------------------------------ sidebar
-status_when_drawn = st.session_state.sim_status   # the Start/Stop buttons below are enabled from this
+# ------------------------------------------------------------------ sidebar and page controls
+status_when_drawn = st.session_state.sim_status
 scenario = st.sidebar.selectbox("Disruption", list(SCENARIOS))
 speed = st.sidebar.slider("Seconds per agent message", 0.0, 2.0, 0.7, 0.1)
-start = st.sidebar.button("Start Simulation", type="primary",
-                          disabled=st.session_state.sim_status == "Running")
-stop = st.sidebar.button("Stop Simulation", disabled=st.session_state.sim_status != "Running")
-if st.session_state.sim_status == "Stopped":
-    st.sidebar.caption("Starting again creates a new run; the stopped run will not resume.")
-if st.sidebar.button("Reset"):
-    for state_key in ["net", "feed", "last", *SIM_STATE_DEFAULTS]:
-        st.session_state.pop(state_key, None)
-    st.rerun()
 st.sidebar.divider()
 st.sidebar.caption("Autonomy limits (Policy agent)")
 st.sidebar.write(f"- High-priority customer orders always go to a human\n"
@@ -163,6 +523,21 @@ st.sidebar.write(f"- High-priority customer orders always go to a human\n"
 st.sidebar.divider()
 st.sidebar.caption(f"Database: {'SAP HANA Cloud' if db.backend() == 'hana' else 'SQLite (local)'}")
 st.sidebar.caption(f"Language model: {llm.status()}")
+
+heading_col, start_col, stop_col, reset_col = st.columns([5, 1.8, 1.2, 1], gap="small")
+with heading_col:
+    st.markdown("OPERATIONS CENTER  /  AGENT NETWORK")
+    st.title("Live Operations Showcase")
+    st.caption("Observe the existing agent workflow from disruption signal to Human Planner decision.")
+start = start_col.button("Start Simulation", type="primary",
+                         disabled=st.session_state.sim_status == "Running", width="stretch")
+stop = stop_col.button("Stop", disabled=st.session_state.sim_status != "Running", width="stretch")
+if st.session_state.sim_status == "Stopped":
+    heading_col.caption("The stopped run is preserved. Starting again creates a new run.")
+if reset_col.button("Reset", width="stretch"):
+    for state_key in ["net", "feed", "last", *SIM_STATE_DEFAULTS]:
+        st.session_state.pop(state_key, None)
+    st.rerun()
 
 if start:
     net = network.Network(T)
@@ -190,23 +565,30 @@ if stop and st.session_state.sim_status == "Running":
         stopped_net.queue.clear()
 
 # ------------------------------------------------------------------ layout
-st.title("ReRoute agent network")
-st.caption("Kaveri EV Motors · Supply Chain Resilience")
-st.caption("Signals in, decisions out: every message between agents is shown live and written to the audit log.")
 banner = st.empty()
 with st.container(border=True):
-    st.markdown("#### Simulation Summary")
+    st.markdown('<div class="rr-section-kicker">RUN PERFORMANCE</div>', unsafe_allow_html=True)
     performance_slots = [c.empty() for c in st.columns(4, gap="small", border=True)]
     st.divider()
-    st.markdown("#### Agent Metrics")
+    st.markdown('<div class="rr-section-kicker">AGENT METRICS</div>', unsafe_allow_html=True)
     kpi_slots = [c.empty() for c in st.columns(5, gap="small", border=True)]
-left, right = st.columns([4, 8])
+
+left, center, right = st.columns([3, 5, 3], gap="small")
 with left:
-    st.subheader("Agents")
-    graph_slot = st.empty()
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">AUTOMATED WORKFLOW</div>', unsafe_allow_html=True)
+        st.subheader("Agent topology")
+        graph_slot = st.empty()
+with center:
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">AGENT COMMUNICATION</div>', unsafe_allow_html=True)
+        st.subheader("Live activity")
+        feed_slot = st.empty()
 with right:
-    st.subheader("Live message feed")
-    feed_slot = st.empty()
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">HUMAN CHECKPOINT</div>', unsafe_allow_html=True)
+        st.subheader("Human oversight")
+        oversight_slot = st.empty()
 
 # ------------------------------------------------------------------ advance one safe agent-message boundary per rerun
 net = st.session_state.get("net")
@@ -250,6 +632,7 @@ if net and st.session_state.sim_status == "Running":
 
 show_simulation_metrics(net, performance_slots)
 
+
 if not net:
     banner.info("Pick a disruption in the sidebar and press **Start Simulation**.")
     show_graph(graph_slot)
@@ -258,6 +641,25 @@ if not net:
 show_graph(graph_slot, st.session_state.get("last"))
 show_feed(feed_slot, st.session_state.feed)
 show_kpis(net, kpi_slots)
+
+with oversight_slot.container():
+    status = st.session_state.sim_status
+    st.caption(f"Simulation status · {status}")
+    st.metric("Actions awaiting decision", len(net.pending))
+    current_plans = [plan for event in net.events.values() for plan in event.get("plans", [])]
+    recommended_plan = next((plan for plan in current_plans if plan.get("recommended")), None)
+    if recommended_plan:
+        st.markdown("**Recommended recovery plan**")
+        st.write(recommended_plan["name"])
+        totals = recommended_plan.get("totals", {})
+        if "extra_cost" in totals:
+            st.caption(f"Extra cost · {explain.inr(totals['extra_cost'])}")
+    elif current_plans:
+        st.caption("No recommended plan is identified in the current results.")
+    else:
+        st.caption("Recovery plans are not available yet.")
+    st.caption("Use the Approval queue below to review and decide on pending actions.")
+
 
 status = st.session_state.sim_status
 if status == "Running":
