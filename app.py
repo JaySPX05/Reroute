@@ -54,7 +54,7 @@ ensure_db()
 T = tables()
 
 # ------------------------------------------------------------------ sidebar
-mode = st.sidebar.radio("Signal", ["Demo scenario", "Paste news or IMD alert", "Latest supplier report"])
+mode = st.sidebar.radio("Signal", ["Demo scenario", "Paste news or IMD alert", "Supplier reports"])
 run = False
 if mode == "Demo scenario":
     pick = st.sidebar.selectbox("Scenario", list(DEMO))
@@ -75,13 +75,23 @@ else:
     if reports.empty:
         st.sidebar.info("No supplier reports yet. Open the Supplier report page to send one.")
     else:
-        # HANA returns rows in no fixed order, so sort by time before taking the newest
-        last = reports.sort_values("created_at").iloc[-1].to_dict()
-        name = T["suppliers"].set_index("supplier_id").loc[last["supplier_id"], "name"]
-        st.sidebar.write(f"**{name}**: {last['issue_type']}, {last['days_down']} days. {last['note']}")
+        # newest first (HANA returns rows in no fixed order); the newest is preselected
+        reports = reports.sort_values("created_at", ascending=False).reset_index(drop=True)
+        names = T["suppliers"].set_index("supplier_id")["name"]
+
+        def label(i: int) -> str:
+            r = reports.iloc[i]
+            when = str(r["created_at"])[:16].replace("T", " ")
+            return f"{names.get(r['supplier_id'], r['supplier_id'])} · {r['issue_type']} · {r['days_down']} days · {when}"
+
+        i = st.sidebar.selectbox(f"Report to analyse ({len(reports)} received, newest first)",
+                                 range(len(reports)), format_func=label)
+        chosen = reports.iloc[i].to_dict()
+        if chosen.get("note"):
+            st.sidebar.caption(f"Note: {chosen['note']}")
         if st.sidebar.button("Analyse", type="primary"):
             st.session_state.result = agent.analyze_report(
-                {k: last[k] for k in ["supplier_id", "issue_type", "days_down", "note"]}, T, save=False)
+                {k: chosen[k] for k in ["supplier_id", "issue_type", "days_down", "note"]}, T, save=False)
             st.session_state.pop("approved_plan_name", None)
             run = True
 if run:
