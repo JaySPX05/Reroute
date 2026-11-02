@@ -85,9 +85,10 @@ def show_graph(slot, active=None):
 
 
 def feed_frame(msgs) -> pd.DataFrame:
-    return pd.DataFrame([{"#": m.seq,
+    # number messages from 1 within this run; the global audit-log number (m.seq) stays in the audit view below
+    return pd.DataFrame([{"#": i,
                           "route": f"{network.AGENTS[m.sender][0]} → {network.AGENTS[m.recipient][0]}",
-                          "summary": m.summary} for m in reversed(msgs)])
+                          "summary": m.summary} for i, m in reversed(list(enumerate(msgs, start=1)))])
 
 
 FEED_COLUMNS = {"#": st.column_config.NumberColumn(width="small"),
@@ -142,6 +143,7 @@ def show_simulation_metrics(net, slots):
 
 
 # ------------------------------------------------------------------ sidebar
+status_when_drawn = st.session_state.sim_status   # the Start/Stop buttons below are enabled from this
 scenario = st.sidebar.selectbox("Disruption", list(SCENARIOS))
 speed = st.sidebar.slider("Seconds per agent message", 0.0, 2.0, 0.7, 0.1)
 start = st.sidebar.button("Start Simulation", type="primary",
@@ -272,6 +274,9 @@ else:
 if status == "Running":
     if speed and processed_message:
         time.sleep(speed)
+    st.rerun()
+elif status != status_when_drawn:
+    # the run finished or was stopped after the sidebar was drawn: redraw once so Start/Stop are enabled correctly
     st.rerun()
 
 def settle():
