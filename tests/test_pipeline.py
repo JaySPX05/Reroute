@@ -124,3 +124,31 @@ def test_capacity_note_names_who_booked_the_backup_and_only_when_it_mattered():
     acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
     covered = acts[(acts["action"] == "wait") & (acts["so_late_after"] == 0)]
     assert len(covered) and (covered["capacity_note"] == "").all()
+
+
+def _chain_port_then_tariff():
+    from reroute import network
+    net = network.Network(T, persist=False, use_llm=False)
+    list(network.simulate(net, [
+        ("Port", "port_notice", "Chennai Port Authority: all container terminal operations suspended for 8 days."),
+        ("Tariff", "tariff_bulletin",
+         "Finance ministry raises basic customs duty on imported lithium-ion cells from 10% to 35%.")]))
+    return net
+
+
+def test_chained_disruptions_never_book_more_than_the_backup_has():
+    net = _chain_port_then_tariff()
+    sm = T["supplier_materials"].set_index(["supplier_id", "material_id"])
+    cap = sm.loc[("S15", "M05")]
+    booked = sum(q for _, q, _ in net.booked[("S15", "M05")])
+    assert 0 < booked <= cap.weekly_capacity * cap.spare_share * 4    # tariff plans over 4 weeks
+
+
+def test_rejected_switch_frees_its_booking():
+    net = _chain_port_then_tariff()
+    a = next(x for x in net.pending.values() if x["action"] == "switch")
+    key = (a["to_supplier_id"], a["material_id"])
+    before = sum(q for _, q, _ in net.booked[key])
+    net.decide(a["action_id"], approve=False, reason="test")
+    assert sum(q for _, q, _ in net.booked[key]) == before - a["qty"]
+    assert all(pid != a["po_id"] for pid, _, _ in net.booked[key])
