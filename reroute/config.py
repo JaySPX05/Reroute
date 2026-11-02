@@ -43,7 +43,11 @@ S4_SANDBOX_BASE = os.getenv(
 # Autonomy limits for the Policy agent: inside these, agents act alone; outside, a human approves
 AUTO_COST_LIMIT_INR = float(os.getenv("AUTO_COST_LIMIT_INR", "100000"))      # extra cost vs doing nothing
 BIG_SWITCH_LIMIT_INR = float(os.getenv("BIG_SWITCH_LIMIT_INR", "5000000"))   # order value moved to another supplier
-FREIGHT_RS_PER_KM = float(os.getenv("FREIGHT_RS_PER_KM", "60"))   # road freight per truckload per km (assumption)
+
+# Freight when switching to a farther supplier: extra road km to the plant x rate, one truckload per PO.
+# Placeholder assumptions; used by the planner to rank plans and shown in each plan's cost breakdown.
+FREIGHT_RS_PER_KM = float(os.getenv("FREIGHT_RS_PER_KM", "60"))   # road freight per truckload per km
+ROAD_FACTOR = float(os.getenv("ROAD_FACTOR", "1.3"))              # road km per straight-line km
 
 # How the ranking weighs the three goals in the "Balanced" plan (must add to 1)
 WEIGHTS_BALANCED = {"cost": 0.25, "delay": 0.40, "service": 0.35}
