@@ -675,19 +675,19 @@ def _curve(lon1, lat1, lon2, lat2, bend=0.18, n=24) -> list:
 
 
 def map_legend(routes: pd.DataFrame, approved: bool):
-    """A key under the map: dot colours for places, line styles for routes actually on the map."""
-    def dot(color, label, size=10):
-        return (f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;white-space:nowrap">'
-                f'<span style="width:{size}px;height:{size}px;border-radius:50%;background:{color};display:inline-block">'
-                f'</span>{label}</span>')
+    """The map key in the side panel: dot colours for places, line styles for the routes actually on the map.
+    Colours are the ones route_map draws with."""
+    def dot(color, label):
+        return (f'<div class="rr-legend-row"><span class="rr-legend-dot" style="background:{color}"></span>'
+                f'<span>{label}</span></div>')
 
     def line(color, label, curved):
         path = "M2 10 Q13 0 24 10" if curved else "M2 6 L24 6"
-        return (f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;white-space:nowrap">'
-                f'<svg width="26" height="12"><path d="{path}" stroke="{color}" stroke-width="3" fill="none"/></svg>'
-                f'{label}</span>')
+        return (f'<div class="rr-legend-row"><svg width="26" height="12" style="flex:0 0 26px">'
+                f'<path d="{path}" stroke="{color}" stroke-width="3" fill="none"/></svg><span>{label}</span></div>')
 
-    items = [dot(_hex([31, 111, 235]), "Our plant", 13), dot("#d62828", "Supplier hit directly"),
+    p = logistics.plant(T)
+    items = [dot(_hex([31, 111, 235]), f"Plant · {p['name']}"), dot("#d62828", "Supplier hit directly"),
              dot("#f4a100", "Down through a supplier it depends on"), dot("#8a94a6", "Unaffected supplier")]
     kinds = set(routes["kind"]) if len(routes) else set()
     if "original" in kinds:
@@ -699,13 +699,13 @@ def map_legend(routes: pd.DataFrame, approved: bool):
             items.append(line(_hex(ROUTE_COLORS["switch"]), "New supplier route", True))
         if "expedite" in kinds:
             items.append(line(_hex(ROUTE_COLORS["expedite"]), "Express shipment, same supplier", True))
-    st.markdown('<div style="display:flex;flex-wrap:wrap;row-gap:6px;font-size:0.9rem;margin:4px 0 8px">'
+    st.markdown('<div class="rr-map-legend"><div class="rr-map-legend-title">MAP KEY</div>'
                 + "".join(items) + "</div>", unsafe_allow_html=True)
 
 
 def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
     """Flat 2D map: suppliers and plant as dots, disrupted original routes as straight red lines,
-    the plan's routes as curves so they stay visible next to the originals. A legend sits underneath."""
+    the plan's routes as curves so they stay visible next to the originals. Its key is map_legend."""
     sup = T["suppliers"].copy()
     status = dict(zip(down["supplier_id"], down["via"])) if len(down) else {}
     sup["color"] = sup["supplier_id"].map(lambda s: [138, 148, 166] if s not in status else
@@ -746,9 +746,8 @@ def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
     zoom = 6.5 if span < 2 else 5.5 if span < 5 else 4.6 if span < 10 else 3.8
     view = pdk.ViewState(latitude=(max(lats) + min(lats)) / 2, longitude=(max(lons) + min(lons)) / 2, zoom=zoom,
                          pitch=0, bearing=0)
-    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_provider="carto", map_style="light",
-                             tooltip={"text": "{label}"}))
-    map_legend(routes, approved)
+    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_provider="carto",
+                             map_style="light" if LIGHT_MODE else "dark", tooltip={"text": "{label}"}))
 
 
 def customer_order_risk(result: dict) -> pd.DataFrame:
@@ -976,15 +975,17 @@ with st.container(border=True):
         st.write(ev.text)
         st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to a ranked plan")
     with map_col:
-        network_map(imp["down"])
+        with st.container(border=True):
+            st.markdown("#### Supply network")
+            route_area = st.container()     # filled at the end of the page, so an approval on this run shows at once
     with intel_col:
         st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
         st.markdown("#### Network command")
-        st.caption("Current supplier impact is reflected on the map and in the exposure strip.")
-        show_map_legend()
+        st.caption("Supplier impact and the routes of the plan picked above the map.")
+        legend_area = st.container()
 
-tab_impact, tab_risk, tab_plan, tab_map, tab_ask, tab_done = st.tabs(
-    ["Impact", "Customer Order Risk Analysis", "Recovery plans", "Map", "Ask ReRoute", "Approved actions"])
+tab_impact, tab_risk, tab_plan, tab_ask, tab_done = st.tabs(
+    ["Impact", "Customer Order Risk Analysis", "Recovery plans", "Ask ReRoute", "Approved actions"])
 
 with tab_plan:
     if s["pos_at_risk"] == 0:
@@ -1033,7 +1034,7 @@ with tab_plan:
                         f"Approved. {n} PO changes queued and supplier messages drafted. "
                         f"Total extra cost {explain.inr(b['total'])}, including "
                         f"{explain.inr(b['extra_freight'])} extra freight. "
-                        "See the Map tab for the new routes and Approved actions for the breakdown."
+                        "The map above now shows the new routes; Approved actions has the breakdown."
                     )
 
         for p in plans:
@@ -1142,31 +1143,6 @@ with tab_risk:
         st.altair_chart((delay_lines + points).properties(
             height=max(320, min(760, 25 * len(chart_orders)))).configure(**chart_theme), width="stretch")
 
-with tab_map:
-    names = [p["name"] for p in plans]
-    approved_name = st.session_state.get("approved_plan_name")
-    if s["pos_at_risk"] == 0 or not names:
-        route_map(imp["down"], pd.DataFrame(), False)
-        st.caption("No purchase order is late, so no route changes.")
-    else:
-        default = approved_name if approved_name in names else next(
-            (p["name"] for p in plans if p.get("recommended")), names[0])
-        pick = st.radio("Show the routes for", names, index=names.index(default), horizontal=True,
-                        format_func=lambda n: f"{n} (approved)" if n == approved_name else n)
-        chosen_plan = next(p for p in plans if p["name"] == pick)
-        is_approved = pick == approved_name
-        r = logistics.routes(T, imp, chosen_plan)
-        route_map(imp["down"], r, is_approved)
-        st.caption("Routes are drawn directly between supplier and plant, not along actual roads. "
-                   "Hover over a dot or route for details.")
-        if len(r):
-            st.dataframe(r.assign(
-                Route=r["label"],
-                Type=r["kind"].map({"original": "Original (disrupted)", "switch": "New supplier",
-                                    "expedite": "Express shipment, same supplier"}),
-                **{"Road km (est.)": r["km"]})[["Type", "Route", "Road km (est.)"]],
-                hide_index=True, width="stretch")
-
 with tab_ask:
     st.caption("Ask about this disruption, for example: Why not switch everything to Coimbatore? Which customers should we call?")
     for m in st.session_state.get("chat", []):
@@ -1211,3 +1187,34 @@ with tab_done:
     if sandbox.exists():
         st.subheader("Purchase orders pulled from the SAP S/4HANA sandbox")
         st.dataframe(pd.read_csv(sandbox), hide_index=True, width="stretch")
+
+# ------------------------------------------------------------------ route map in the panel at the top
+# Drawn last, after the tabs, so a plan approved on this run is already shown as approved.
+names = [p["name"] for p in plans]
+approved_name = st.session_state.get("approved_plan_name")
+with route_area:
+    if s["pos_at_risk"] == 0 or not names:
+        r, is_approved = pd.DataFrame(), False
+        route_map(imp["down"], r, is_approved)
+        st.caption("No purchase order is late, so no route changes.")
+    else:
+        default = approved_name if approved_name in names else next(
+            (p["name"] for p in plans if p.get("recommended")), names[0])
+        pick = st.radio("Show the routes for", names, index=names.index(default), horizontal=True,
+                        format_func=lambda n: f"{n} (approved)" if n == approved_name else n)
+        chosen_plan = next(p for p in plans if p["name"] == pick)
+        is_approved = pick == approved_name
+        r = logistics.routes(T, imp, chosen_plan)
+        route_map(imp["down"], r, is_approved)
+        st.caption("Routes are drawn directly between supplier and plant, not along actual roads. "
+                   "Hover over a dot or route for details.")
+        if len(r):
+            with st.expander("Route details"):
+                st.dataframe(r.assign(
+                    Route=r["label"],
+                    Type=r["kind"].map({"original": "Original (disrupted)", "switch": "New supplier",
+                                        "expedite": "Express shipment, same supplier"}),
+                    **{"Road km (est.)": r["km"]})[["Type", "Route", "Road km (est.)"]],
+                    hide_index=True, width="stretch")
+with legend_area:
+    map_legend(r, is_approved)
