@@ -1,0 +1,28 @@
+[client]
+# pages are linked from the horizontal bar at the top of each page (top_nav)
+showSidebarNavigation = false
+
+# ReRoute colour system: dark navy surfaces, teal actions, cyan highlights (same values as `palette` in the pages)
+[theme.dark]
+primaryColor = "#13B8A6"              # primary teal: buttons, selected radio, slider, active tab
+backgroundColor = "#07111F"           # main background
+secondaryBackgroundColor = "#0D1B2D"  # panel background
+textColor = "#F1F6FA"                 # primary text
+linkColor = "#2AC7E8"                 # cyan highlight
+borderColor = "#203247"
+redColor = "#F06565"                  # critical
+yellowColor = "#F0B44A"               # warning
+greenColor = "#35CF8D"                # success
+blueColor = "#2AC7E8"
+
+[theme.light]
+primaryColor = "#087D73"
+backgroundColor = "#EEF2F5"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#102435"
+linkColor = "#078AAA"
+borderColor = "#D7E0E5"
+redColor = "#C43D3D"
+yellowColor = "#A46608"
+greenColor = "#168558"
+blueColor = "#078AAA"

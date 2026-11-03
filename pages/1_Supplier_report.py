@@ -9,35 +9,51 @@ from reroute import agent, db
 st.set_page_config(page_title="Report a problem · ReRoute")
 _theme_context = getattr(getattr(st, "context", None), "theme", None)
 LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
-palette = {
-    "page": "#E7EFEE" if LIGHT_MODE else "#061820",
-    "panel": "#FFFFFF" if LIGHT_MODE else "#0B2C36",
-    "panel_soft": "#F0F7F5" if LIGHT_MODE else "#103743",
-    "text": "#0B2932" if LIGHT_MODE else "#E8F4F6",
-    "muted": "#547078" if LIGHT_MODE else "#B0C7CE",
-    "accent": "#007E8A" if LIGHT_MODE else "#00D9E8",
-    "on_accent": "#FFFFFF" if LIGHT_MODE else "#03262B",
-    "teal": "#087F73" if LIGHT_MODE else "#20C6B7",
-    "border": "rgba(0, 126, 138, .30)" if LIGHT_MODE else "rgba(0, 217, 232, .28)",
-    "danger": "#C13F55" if LIGHT_MODE else "#FF5C70",
-    "warning": "#8A5600" if LIGHT_MODE else "#F4B942",
-    "success": "#187A5B" if LIGHT_MODE else "#32D296",
-    "sidebar": "#E0ECEA" if LIGHT_MODE else "#041319",
-    "sidebar_text": "#18363D" if LIGHT_MODE else "#C5D8DC",
-    "card": "#FFFFFF" if LIGHT_MODE else "#0B2831",
+palette = {   # ReRoute colour system (dark navy, teal, cyan); light-mode value first
+    "page": "#EEF2F5" if LIGHT_MODE else "#07111F",          # main background
+    "elevated": "#F5F7F9" if LIGHT_MODE else "#0A1728",      # elevated background
+    "panel": "#FFFFFF" if LIGHT_MODE else "#0D1B2D",         # panel background
+    "panel_hover": "#F8FAFB" if LIGHT_MODE else "#102238",
+    "panel_soft": "#EDF3F5" if LIGHT_MODE else "#12253A",    # strong panel surface
+    "text": "#102435" if LIGHT_MODE else "#F1F6FA",          # primary text
+    "muted": "#536877" if LIGHT_MODE else "#9EAFBE",         # secondary text
+    "faint": "#81919C" if LIGHT_MODE else "#6E8295",         # muted text
+    "accent": "#078AAA" if LIGHT_MODE else "#2AC7E8",        # cyan highlight
+    "on_accent": "#FFFFFF" if LIGHT_MODE else "#07111F",
+    "teal": "#087D73" if LIGHT_MODE else "#13B8A6",          # primary teal
+    "teal_hover": "#066B63" if LIGHT_MODE else "#19CBB7",
+    "teal_surface": "#EDF3F5" if LIGHT_MODE else "#063F3B",  # dark teal surface
+    "border": "#D7E0E5" if LIGHT_MODE else "#203247",
+    "border_subtle": "#E7ECEF" if LIGHT_MODE else "#172A3E",
+    "danger": "#C43D3D" if LIGHT_MODE else "#F06565",        # critical
+    "warning": "#A46608" if LIGHT_MODE else "#F0B44A",
+    "success": "#168558" if LIGHT_MODE else "#35CF8D",
+    "input": "#F8FAFB" if LIGHT_MODE else "#091625",
+    "map_bg": "#E7ECEC" if LIGHT_MODE else "#091827",
+    "sidebar": "#F5F7F9" if LIGHT_MODE else "#0A1728",
+    "sidebar_text": "#536877" if LIGHT_MODE else "#9EAFBE",
+    "card": "#FFFFFF" if LIGHT_MODE else "#0D1B2D",
 }
 st.markdown(
     f"""<style>
 :root {{
     --rr-page: var(--st-background-color, {palette["page"]});
     --rr-panel: var(--st-secondary-background-color, {palette["panel"]});
-    --rr-panel-soft: color-mix(in srgb, var(--rr-panel) 76%, var(--rr-page));
+    --rr-panel-soft: {palette["panel_soft"]};
+    --rr-panel-hover: {palette["panel_hover"]};
+    --rr-elevated: {palette["elevated"]};
+    --rr-input: {palette["input"]};
+    --rr-map-bg: {palette["map_bg"]};
+    --rr-border-subtle: {palette["border_subtle"]};
     --rr-text: var(--st-text-color, {palette["text"]});
-    --rr-muted: color-mix(in srgb, var(--rr-text) 68%, var(--rr-panel));
-    --rr-accent: color-mix(in srgb, var(--rr-text) 58%, #00D9E8 42%);
-    --rr-button-bg: #006B75;
-    --rr-button-text: #FFFFFF;
-    --rr-teal: #20C6B7;
+    --rr-muted: {palette["muted"]};
+    --rr-faint: {palette["faint"]};
+    --rr-accent: {palette["accent"]};
+    --rr-button-bg: {palette["teal"]};
+    --rr-button-text: {palette["on_accent"]};
+    --rr-teal: {palette["teal"]};
+    --rr-teal-hover: {palette["teal_hover"]};
+    --rr-teal-surface: {palette["teal_surface"]};
     --rr-border: var(--st-border-color, {palette["border"]});
     --rr-danger: var(--st-red-color, {palette["danger"]});
     --rr-warning: var(--st-yellow-color, {palette["warning"]});
@@ -223,26 +239,26 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stButton"] button[kind="primary"],
 [data-testid="stFormSubmitButton"],
 [data-testid="stFormSubmitButton"] button {{
-    background: #006B75 !important;
-    border-color: #006B75 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal) !important;
+    border-color: var(--rr-teal) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:hover,
 [data-testid="stFormSubmitButton"]:hover,
 [data-testid="stFormSubmitButton"] button:hover {{
-    background: #005761 !important;
-    border-color: #005761 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal-hover) !important;
+    border-color: var(--rr-teal-hover) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:active,
 [data-testid="stFormSubmitButton"]:active,
 [data-testid="stFormSubmitButton"] button:active {{
-    background: #004B53 !important;
-    border-color: #004B53 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal-hover) !important;
+    border-color: var(--rr-teal-hover) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:focus-visible,
 [data-testid="stFormSubmitButton"]:focus-visible,
@@ -253,10 +269,10 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stButton"] button[kind="primary"]:disabled,
 [data-testid="stFormSubmitButton"]:disabled,
 [data-testid="stFormSubmitButton"] button:disabled {{
-    background: #526F73 !important;
-    border-color: #526F73 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-faint) !important;
+    border-color: var(--rr-faint) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
     opacity: 1 !important;
     cursor: not-allowed;
 }}
@@ -302,7 +318,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
 [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] [role="combobox"] {{
     color: var(--rr-text);
-    background: var(--rr-panel-soft);
+    background: var(--rr-input);
     border-color: var(--rr-border);
     border-radius: 4px;
 }}
@@ -315,7 +331,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stSelectbox"] [role="combobox"] {{
     color: var(--rr-text) !important;
     -webkit-text-fill-color: var(--rr-text);
-    background: var(--rr-panel-soft) !important;
+    background: var(--rr-input) !important;
     border-color: var(--rr-border) !important;
 }}
 input::placeholder, textarea::placeholder {{
@@ -388,6 +404,40 @@ hr {{ border-color: var(--rr-border); }}
 </style>""",
     unsafe_allow_html=True,
 )
+
+# ------------------------------------------------------------------ top navigation
+# The three pages sit in a horizontal bar at the top instead of the sidebar list
+# (.streamlit/config.toml turns the sidebar page list off). Same block in all three pages.
+def top_nav(active: str):
+    st.markdown("""<style>
+.rr-brand {{ font-family: "Bahnschrift", "Avenir Next", "Segoe UI", sans-serif; font-size: 1.4rem;
+            font-weight: 750; letter-spacing: -.04em; color: var(--rr-text); white-space: nowrap; }}
+.rr-brand span {{ color: var(--rr-accent); }}
+.st-key-rr_topnav .rr-brand {{ line-height: 1; transform: translateY(-.4rem); }}   /* level with the page links */
+.st-key-rr_topnav {{ border-bottom: 1px solid var(--rr-border); padding-bottom: .35rem; margin-bottom: .6rem; }}
+.st-key-rr_topnav [data-testid="stPageLink"] {{ display: flex; justify-content: center; }}
+.st-key-rr_topnav [class*="st-key-rr_nav_"] {{ align-items: center; }}
+.st-key-rr_topnav [data-testid="stPageLink"] a {{ justify-content: center; border-radius: 6px; }}
+.st-key-rr_topnav [data-testid="stPageLink"] a:hover {{ background: color-mix(in srgb, var(--rr-accent) 12%, transparent); }}
+.st-key-rr_nav_active [data-testid="stPageLink"] a {{
+    background: color-mix(in srgb, var(--rr-accent) 15%, transparent);
+    border-bottom: 2px solid var(--rr-accent); border-radius: 6px 6px 0 0; }}
+.st-key-rr_nav_active [data-testid="stPageLink"] a p {{ color: var(--rr-text); font-weight: 650; }}
+</style>""".format(), unsafe_allow_html=True)
+    links = [("app", "app.py", "app", ":material/hub:"),
+             ("report", "pages/1_Supplier_report.py", "Supplier report", ":material/report:"),
+             ("showcase", "pages/2_Live_showcase.py", "Live showcase", ":material/auto_awesome:"),
+             ("about", "pages/3_About.py", "About", ":material/info:")]
+    with st.container(key="rr_topnav"):
+        # logo on the left; the page links in the middle
+        cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.5, 1.6], vertical_alignment="center")
+        cols[0].markdown('<div class="rr-brand">Re<span>Route</span></div>', unsafe_allow_html=True)
+        for col, (name, page, label, icon) in zip(cols[1:5], links):
+            with col.container(key="rr_nav_active" if name == active else f"rr_nav_{name}"):
+                st.page_link(page, label=label, icon=icon)
+
+top_nav("report")
+
 st.markdown("SUPPLIER PORTAL  /  INCIDENT INTAKE")
 T = db.load_tables()
 sup = T["suppliers"].sort_values("name")

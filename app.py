@@ -14,35 +14,51 @@ from reroute import agent, config, db, explain, impact, llm, logistics, planner,
 st.set_page_config(page_title="ReRoute", layout="wide")
 _theme_context = getattr(getattr(st, "context", None), "theme", None)
 LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
-palette = {
-    "page": "#E7EFEE" if LIGHT_MODE else "#061820",
-    "panel": "#FFFFFF" if LIGHT_MODE else "#0B2C36",
-    "panel_soft": "#F0F7F5" if LIGHT_MODE else "#103743",
-    "text": "#0B2932" if LIGHT_MODE else "#E8F4F6",
-    "muted": "#547078" if LIGHT_MODE else "#B0C7CE",
-    "accent": "#007E8A" if LIGHT_MODE else "#00D9E8",
-    "on_accent": "#FFFFFF" if LIGHT_MODE else "#03262B",
-    "teal": "#087F73" if LIGHT_MODE else "#20C6B7",
-    "border": "rgba(0, 126, 138, .30)" if LIGHT_MODE else "rgba(0, 217, 232, .28)",
-    "danger": "#C13F55" if LIGHT_MODE else "#FF5C70",
-    "warning": "#8A5600" if LIGHT_MODE else "#F4B942",
-    "success": "#187A5B" if LIGHT_MODE else "#32D296",
-    "sidebar": "#E0ECEA" if LIGHT_MODE else "#041319",
-    "sidebar_text": "#18363D" if LIGHT_MODE else "#C5D8DC",
-    "card": "#FFFFFF" if LIGHT_MODE else "#0B2831",
+palette = {   # ReRoute colour system (dark navy, teal, cyan); light-mode value first
+    "page": "#EEF2F5" if LIGHT_MODE else "#07111F",          # main background
+    "elevated": "#F5F7F9" if LIGHT_MODE else "#0A1728",      # elevated background
+    "panel": "#FFFFFF" if LIGHT_MODE else "#0D1B2D",         # panel background
+    "panel_hover": "#F8FAFB" if LIGHT_MODE else "#102238",
+    "panel_soft": "#EDF3F5" if LIGHT_MODE else "#12253A",    # strong panel surface
+    "text": "#102435" if LIGHT_MODE else "#F1F6FA",          # primary text
+    "muted": "#536877" if LIGHT_MODE else "#9EAFBE",         # secondary text
+    "faint": "#81919C" if LIGHT_MODE else "#6E8295",         # muted text
+    "accent": "#078AAA" if LIGHT_MODE else "#2AC7E8",        # cyan highlight
+    "on_accent": "#FFFFFF" if LIGHT_MODE else "#07111F",
+    "teal": "#087D73" if LIGHT_MODE else "#13B8A6",          # primary teal
+    "teal_hover": "#066B63" if LIGHT_MODE else "#19CBB7",
+    "teal_surface": "#EDF3F5" if LIGHT_MODE else "#063F3B",  # dark teal surface
+    "border": "#D7E0E5" if LIGHT_MODE else "#203247",
+    "border_subtle": "#E7ECEF" if LIGHT_MODE else "#172A3E",
+    "danger": "#C43D3D" if LIGHT_MODE else "#F06565",        # critical
+    "warning": "#A46608" if LIGHT_MODE else "#F0B44A",
+    "success": "#168558" if LIGHT_MODE else "#35CF8D",
+    "input": "#F8FAFB" if LIGHT_MODE else "#091625",
+    "map_bg": "#E7ECEC" if LIGHT_MODE else "#091827",
+    "sidebar": "#F5F7F9" if LIGHT_MODE else "#0A1728",
+    "sidebar_text": "#536877" if LIGHT_MODE else "#9EAFBE",
+    "card": "#FFFFFF" if LIGHT_MODE else "#0D1B2D",
 }
 st.markdown(
     f"""<style>
 :root {{
     --rr-page: var(--st-background-color, {palette["page"]});
     --rr-panel: var(--st-secondary-background-color, {palette["panel"]});
-    --rr-panel-soft: color-mix(in srgb, var(--rr-panel) 76%, var(--rr-page));
+    --rr-panel-soft: {palette["panel_soft"]};
+    --rr-panel-hover: {palette["panel_hover"]};
+    --rr-elevated: {palette["elevated"]};
+    --rr-input: {palette["input"]};
+    --rr-map-bg: {palette["map_bg"]};
+    --rr-border-subtle: {palette["border_subtle"]};
     --rr-text: var(--st-text-color, {palette["text"]});
-    --rr-muted: color-mix(in srgb, var(--rr-text) 68%, var(--rr-panel));
-    --rr-accent: color-mix(in srgb, var(--rr-text) 58%, #00D9E8 42%);
-    --rr-button-bg: #006B75;
-    --rr-button-text: #FFFFFF;
-    --rr-teal: #20C6B7;
+    --rr-muted: {palette["muted"]};
+    --rr-faint: {palette["faint"]};
+    --rr-accent: {palette["accent"]};
+    --rr-button-bg: {palette["teal"]};
+    --rr-button-text: {palette["on_accent"]};
+    --rr-teal: {palette["teal"]};
+    --rr-teal-hover: {palette["teal_hover"]};
+    --rr-teal-surface: {palette["teal_surface"]};
     --rr-border: var(--st-border-color, {palette["border"]});
     --rr-danger: var(--st-red-color, {palette["danger"]});
     --rr-warning: var(--st-yellow-color, {palette["warning"]});
@@ -184,6 +200,9 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 }}
 .rr-operational-item {{ min-width: 0; padding: .68rem .82rem; }}
 .rr-operational-item + .rr-operational-item {{ border-left: 1px solid var(--rr-border); }}
+.st-key-rr_intel_card .rr-operational-strip {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+.st-key-rr_intel_card .rr-operational-item:nth-child(3) {{ border-left: 0; }}
+.st-key-rr_intel_card .rr-operational-item:nth-child(n+3) {{ border-top: 1px solid var(--rr-border); }}
 .rr-operational-label {{ color: var(--rr-muted); font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }}
 .rr-operational-value {{ margin-top: .18rem; color: var(--rr-text); font-size: 1.2rem; font-weight: 750; line-height: 1.2; }}
 .rr-operational-note {{ margin-top: .2rem; color: var(--rr-muted); font-size: .72rem; line-height: 1.25; }}
@@ -203,6 +222,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
     overflow: hidden;
     background: var(--rr-panel);
 }}
+[data-testid="stMap"], [data-testid="stDeckGlJsonChart"] {{ background: var(--rr-map-bg); }}
 [data-testid="stMap"] canvas {{ filter: saturate(1.12) contrast(1.06) drop-shadow(0 0 2px rgba(231, 248, 250, .48)); }}
 .rr-map-legend {{
     display: flex;
@@ -272,26 +292,26 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stButton"] button[kind="primary"],
 [data-testid="stFormSubmitButton"],
 [data-testid="stFormSubmitButton"] button {{
-    background: #006B75 !important;
-    border-color: #006B75 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal) !important;
+    border-color: var(--rr-teal) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:hover,
 [data-testid="stFormSubmitButton"]:hover,
 [data-testid="stFormSubmitButton"] button:hover {{
-    background: #005761 !important;
-    border-color: #005761 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal-hover) !important;
+    border-color: var(--rr-teal-hover) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:active,
 [data-testid="stFormSubmitButton"]:active,
 [data-testid="stFormSubmitButton"] button:active {{
-    background: #004B53 !important;
-    border-color: #004B53 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal-hover) !important;
+    border-color: var(--rr-teal-hover) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:focus-visible,
 [data-testid="stFormSubmitButton"]:focus-visible,
@@ -302,10 +322,10 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stButton"] button[kind="primary"]:disabled,
 [data-testid="stFormSubmitButton"]:disabled,
 [data-testid="stFormSubmitButton"] button:disabled {{
-    background: #526F73 !important;
-    border-color: #526F73 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-faint) !important;
+    border-color: var(--rr-faint) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
     opacity: 1 !important;
     cursor: not-allowed;
 }}
@@ -351,7 +371,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
 [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] [role="combobox"] {{
     color: var(--rr-text);
-    background: var(--rr-panel-soft);
+    background: var(--rr-input);
     border-color: var(--rr-border);
     border-radius: 4px;
 }}
@@ -364,7 +384,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stSelectbox"] [role="combobox"] {{
     color: var(--rr-text) !important;
     -webkit-text-fill-color: var(--rr-text);
-    background: var(--rr-panel-soft) !important;
+    background: var(--rr-input) !important;
     border-color: var(--rr-border) !important;
 }}
 input::placeholder, textarea::placeholder {{
@@ -438,6 +458,46 @@ hr {{ border-color: var(--rr-border); }}
     unsafe_allow_html=True,
 )
 
+
+# ------------------------------------------------------------------ top navigation
+# The three pages sit in a horizontal bar at the top instead of the sidebar list
+# (.streamlit/config.toml turns the sidebar page list off). Same block in all three pages.
+def top_nav(active: str):
+    st.markdown("""<style>
+.rr-brand {{ font-family: "Bahnschrift", "Avenir Next", "Segoe UI", sans-serif; font-size: 1.4rem;
+            font-weight: 750; letter-spacing: -.04em; color: var(--rr-text); white-space: nowrap; }}
+.rr-brand span {{ color: var(--rr-accent); }}
+.st-key-rr_topnav .rr-brand {{ line-height: 1; transform: translateY(-.4rem); }}   /* level with the page links */
+.st-key-rr_topnav {{ border-bottom: 1px solid var(--rr-border); padding-bottom: .35rem; margin-bottom: .6rem; }}
+.st-key-rr_topnav [data-testid="stPageLink"] {{ display: flex; justify-content: center; }}
+.st-key-rr_topnav [class*="st-key-rr_nav_"] {{ align-items: center; }}
+.st-key-rr_topnav [data-testid="stPageLink"] a {{ justify-content: center; border-radius: 6px; }}
+.st-key-rr_topnav [data-testid="stPageLink"] a:hover {{ background: color-mix(in srgb, var(--rr-accent) 12%, transparent); }}
+.st-key-rr_nav_active [data-testid="stPageLink"] a {{
+    background: color-mix(in srgb, var(--rr-accent) 15%, transparent);
+    border-bottom: 2px solid var(--rr-accent); border-radius: 6px 6px 0 0; }}
+.st-key-rr_nav_active [data-testid="stPageLink"] a p {{ color: var(--rr-text); font-weight: 650; }}
+</style>""".format(), unsafe_allow_html=True)
+    links = [("app", "app.py", "app", ":material/hub:"),
+             ("report", "pages/1_Supplier_report.py", "Supplier report", ":material/report:"),
+             ("showcase", "pages/2_Live_showcase.py", "Live showcase", ":material/auto_awesome:"),
+             ("about", "pages/3_About.py", "About", ":material/info:")]
+    with st.container(key="rr_topnav"):
+        # logo on the left; the page links in the middle
+        cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.5, 1.6], vertical_alignment="center")
+        cols[0].markdown('<div class="rr-brand">Re<span>Route</span></div>', unsafe_allow_html=True)
+        for col, (name, page, label, icon) in zip(cols[1:5], links):
+            with col.container(key="rr_nav_active" if name == active else f"rr_nav_{name}"):
+                st.page_link(page, label=label, icon=icon)
+
+def page_footer(lines):
+    """The page's status details, shown at the bottom of the page."""
+    st.divider()
+    for line in lines:
+        st.caption(line)
+
+
+
 SIGNALS = json.loads((config.DATA_DIR / "sample_signals.json").read_text(encoding="utf-8"))
 DEMO = {
     "Hosur flood (news)": "N01",
@@ -464,69 +524,77 @@ def tables():
 
 ensure_db()
 T = tables()
+top_nav("app")
+STATUS = (f"Database: {'SAP HANA Cloud' if db.backend() == 'hana' else 'SQLite (local)'}",
+          f"Language model: {llm.status()}",
+          f"Data as of {T['meta'].set_index('key').loc['as_of', 'value']}")
 
-# ------------------------------------------------------------------ sidebar
-mode = st.sidebar.radio("Signal", ["Demo scenario", "Paste news or IMD alert", "Supplier reports"])
-run = False
-glance = False
-if mode == "Demo scenario":
-    pick = st.sidebar.selectbox("Scenario", list(DEMO))
-    st.sidebar.write(f"_{TEXT[DEMO[pick]]['text']}_")
-    if st.sidebar.button("Analyse", type="primary"):
-        s = TEXT[DEMO[pick]]
-        st.session_state.result = agent.analyze_text(s["text"], T, source=s["source"])
-        st.session_state.pop("approved_plan_name", None)
-        run = True
-elif mode == "Paste news or IMD alert":
-    text = st.sidebar.text_area("Text", height=140, placeholder="Paste a news line or weather alert")
-    if st.sidebar.button("Analyse", type="primary", disabled=not text.strip()):
-        st.session_state.result = agent.analyze_text(text, T)
-        st.session_state.pop("approved_plan_name", None)
-        run = True
-else:
-    reports = db.supplier_reports()          # resolved reports are hidden but kept in the database
-    if reports.empty:
-        st.sidebar.info("No open supplier reports. Open the Supplier report page to send one.")
-    else:
-        # newest first (HANA returns rows in no fixed order); the newest is preselected
-        reports = reports.sort_values("created_at", ascending=False).reset_index(drop=True)
-        names = T["suppliers"].set_index("supplier_id")["name"]
-        glance = st.sidebar.radio("View", ["One report", "All at a glance"], horizontal=True) == "All at a glance"
+# ------------------------------------------------------------------ page frame: header, then three boxes
+# left = signal controls + analysis, centre = map, right = live network information; workflow and tabs below
+header_area = st.container()
+disruption_col, map_col, intel_col = st.columns([2.4, 6, 2.4], gap="medium")
+left_card = disruption_col.container(border=True, key="rr_left_card")
+intel_card = intel_col.container(border=True, key="rr_intel_card")
 
-    if not reports.empty and not glance:
-        def label(i: int) -> str:
-            r = reports.iloc[i]
-            when = str(r["created_at"])[:16].replace("T", " ")
-            return f"{names.get(r['supplier_id'], r['supplier_id'])} · {r['issue_type']} · {r['days_down']} days · {when}"
-
-        i = st.sidebar.selectbox(f"Report to analyse ({len(reports)} received, newest first)",
-                                 range(len(reports)), format_func=label)
-        chosen = reports.iloc[i].to_dict()
-        if chosen.get("note"):
-            st.sidebar.caption(f"Note: {chosen['note']}")
-        if st.sidebar.button("Analyse", type="primary"):
-            st.session_state.result = agent.analyze_report(
-                {k: chosen[k] for k in ["supplier_id", "issue_type", "days_down", "note"]}, T, save=False)
+# ------------------------------------------------------------------ signal controls (left box)
+with left_card:
+    mode = st.radio("Signal", ["Demo scenario", "Paste news or IMD alert", "Supplier reports"])
+    run = False
+    glance = False
+    if mode == "Demo scenario":
+        pick = st.selectbox("Scenario", list(DEMO))
+        st.write(f"_{TEXT[DEMO[pick]]['text']}_")
+        if st.button("Analyse", type="primary"):
+            s = TEXT[DEMO[pick]]
+            st.session_state.result = agent.analyze_text(s["text"], T, source=s["source"])
             st.session_state.pop("approved_plan_name", None)
             run = True
-        if st.sidebar.button("Mark as resolved",
-                             help="Hide this report from the dashboard once it's dealt with. It stays in the database."):
-            db.clear_supplier_report(chosen)
-            st.toast(f"Marked as resolved: {label(i)}")
-            st.rerun()
+    elif mode == "Paste news or IMD alert":
+        text = st.text_area("Text", height=140, placeholder="Paste a news line or weather alert")
+        if st.button("Analyse", type="primary", disabled=not text.strip()):
+            st.session_state.result = agent.analyze_text(text, T)
+            st.session_state.pop("approved_plan_name", None)
+            run = True
+    else:
+        reports = db.supplier_reports()          # resolved reports are hidden but kept in the database
+        if reports.empty:
+            st.info("No open supplier reports. Open the Supplier report page to send one.")
+        else:
+            # newest first (HANA returns rows in no fixed order); the newest is preselected
+            reports = reports.sort_values("created_at", ascending=False).reset_index(drop=True)
+            names = T["suppliers"].set_index("supplier_id")["name"]
+            glance = st.radio("View", ["One report", "All at a glance"], horizontal=True) == "All at a glance"
+
+        if not reports.empty and not glance:
+            def label(i: int) -> str:
+                r = reports.iloc[i]
+                when = str(r["created_at"])[:16].replace("T", " ")
+                return f"{names.get(r['supplier_id'], r['supplier_id'])} · {r['issue_type']} · {r['days_down']} days · {when}"
+
+            i = st.selectbox(f"Report to analyse ({len(reports)} received, newest first)",
+                                     range(len(reports)), format_func=label)
+            chosen = reports.iloc[i].to_dict()
+            if chosen.get("note"):
+                st.caption(f"Note: {chosen['note']}")
+            if st.button("Analyse", type="primary"):
+                st.session_state.result = agent.analyze_report(
+                    {k: chosen[k] for k in ["supplier_id", "issue_type", "days_down", "note"]}, T, save=False)
+                st.session_state.pop("approved_plan_name", None)
+                run = True
+            if st.button("Mark as resolved",
+                                 help="Hide this report from the dashboard once it's dealt with. It stays in the database."):
+                db.clear_supplier_report(chosen)
+                st.toast(f"Marked as resolved: {label(i)}")
+                st.rerun()
 if run:
     st.session_state.chat = []
 
-st.sidebar.divider()
-st.sidebar.caption(f"Database: {'SAP HANA Cloud' if db.backend() == 'hana' else 'SQLite (local)'}")
-st.sidebar.caption(f"Language model: {llm.status()}")
-st.sidebar.caption(f"Data as of {T['meta'].set_index('key').loc['as_of', 'value']}")
 
 # ------------------------------------------------------------------ map helper
 def network_map(down: pd.DataFrame | None = None):
     sup = T["suppliers"].copy()
     days = dict(zip(down["supplier_id"], down["via"])) if down is not None and len(down) else {}
-    red, amber, grey, blue = "#FF5C70", "#F4B942", "#91A7B0", "#45B7FF"
+    red, amber, grey, blue = palette["danger"], palette["warning"], palette["faint"], palette["teal"]  # plant: teal
     sup["color"] = sup["supplier_id"].map(lambda s: grey if s not in days else red if days[s] == "hit directly" else amber)
     sup["size"] = sup["supplier_id"].map(lambda s: 9000 if s in days else 5000)
     city = T["cities"].set_index("city")
@@ -541,7 +609,7 @@ def network_map(down: pd.DataFrame | None = None):
 
 
 def show_map_legend():
-    red, amber, grey, blue = "#FF5C70", "#F4B942", "#91A7B0", "#45B7FF"
+    red, amber, grey, blue = palette["danger"], palette["warning"], palette["faint"], palette["teal"]  # plant: teal
     with st.container(border=True):
         st.markdown(
             f"""<div class="rr-map-legend">
@@ -660,8 +728,14 @@ def show_operational_strip(summary: dict):
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
-ROUTE_COLORS = {"original": [214, 40, 40], "switch": [31, 111, 235], "expedite": [142, 68, 173]}
-APPROVED_COLOR = [46, 139, 87]
+def _rgb(hex_color: str) -> list:
+    return [int(hex_color[i:i + 2], 16) for i in (1, 3, 5)]
+
+
+PLANT_COLOR = _rgb(palette["teal"])                                       # teal
+ROUTE_COLORS = {"original": _rgb(palette["danger"]), "switch": _rgb(palette["accent"]),   # critical, cyan
+                "expedite": [142, 68, 173]}
+APPROVED_COLOR = _rgb(palette["success"])
 
 
 def _hex(rgb) -> str:
@@ -694,8 +768,8 @@ def map_legend(routes: pd.DataFrame, approved: bool):
                 f'<path d="{path}" stroke="{color}" stroke-width="3" fill="none"/></svg><span>{label}</span></div>')
 
     p = logistics.plant(T)
-    items = [dot(_hex([31, 111, 235]), f"Plant · {p['name']}"), dot("#d62828", "Supplier hit directly"),
-             dot("#f4a100", "Down through a supplier it depends on"), dot("#8a94a6", "Unaffected supplier")]
+    items = [dot(_hex(PLANT_COLOR), f"Plant · {p['name']}"), dot(palette["danger"], "Supplier hit directly"),
+             dot(palette["warning"], "Down through a supplier it depends on"), dot(palette["faint"], "Unaffected supplier")]
     kinds = set(routes["kind"]) if len(routes) else set()
     if "original" in kinds:
         items.append(line(_hex(ROUTE_COLORS["original"]), "Original route (disrupted)", False))
@@ -715,8 +789,8 @@ def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
     the plan's routes as curves so they stay visible next to the originals. Its key is map_legend."""
     sup = T["suppliers"].copy()
     status = dict(zip(down["supplier_id"], down["via"])) if len(down) else {}
-    sup["color"] = sup["supplier_id"].map(lambda s: [138, 148, 166] if s not in status else
-                                          [214, 40, 40] if status[s] == "hit directly" else [244, 161, 0])
+    sup["color"] = sup["supplier_id"].map(lambda s: _rgb(palette["faint"]) if s not in status else
+                                          _rgb(palette["danger"]) if status[s] == "hit directly" else _rgb(palette["warning"]))
     sup["n"] = sup.groupby("city").cumcount()            # same small spread as network_map, so lines meet the dots
     sup["lat"] = sup["lat"] + sup["n"] * 0.04
     sup["label"] = sup["name"] + " (" + sup["city"] + ")" + sup["supplier_id"].map(
@@ -729,7 +803,7 @@ def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
     layers = [pdk.Layer("ScatterplotLayer", sup, get_position=["lon", "lat"], get_fill_color="color",
                         get_radius=9000, radius_min_pixels=5, radius_max_pixels=9, stroked=True,
                         get_line_color=[255, 255, 255], get_line_width=0, line_width_min_pixels=1, pickable=True),
-              pdk.Layer("ScatterplotLayer", plant_df, get_position=["lon", "lat"], get_fill_color=[31, 111, 235],
+              pdk.Layer("ScatterplotLayer", plant_df, get_position=["lon", "lat"], get_fill_color=PLANT_COLOR,
                         get_radius=14000, radius_min_pixels=8, radius_max_pixels=12, stroked=True,
                         get_line_color=[255, 255, 255], get_line_width=0, line_width_min_pixels=1.5, pickable=True)]
     pts = [(p["lat"], p["lon"])]
@@ -896,7 +970,7 @@ def analyse_all_reports(rows: tuple, _tables) -> list:
 
 def show_reports_at_a_glance(reports: pd.DataFrame):
     st.title("Supplier reports at a glance")
-    st.caption("Kaveri EV Motors · Supply Chain Resilience")
+    st.caption("Supply Chain Resilience")
     if reports.empty:
         st.info("No supplier reports received yet.")
         return
@@ -939,120 +1013,121 @@ def show_reports_at_a_glance(reports: pd.DataFrame):
         })
     st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
     st.caption("Each report is analysed on its own, newest first. To see a report's three plans and approve one, "
-               "switch the sidebar to **One report** and pick it.")
+               "switch the view on the left to **One report** and pick it.")
     network_map(pd.DataFrame([{"supplier_id": k, "via": v} for k, v in down.items()]))
 
 
 # ------------------------------------------------------------------ main
 if glance:
-    show_reports_at_a_glance(reports)
+    with map_col:
+        show_reports_at_a_glance(reports)
+    with intel_card:
+        show_map_legend()
+    page_footer(STATUS)
     st.stop()
 
 res = st.session_state.get("result")
 if not res:
-    st.markdown("OPERATIONS  /  SOUTH INDIA NETWORK")
-    st.title("ReRoute Control Tower")
-    st.caption("Kaveri EV Motors · Supply Chain Resilience")
-    st.caption("Select a signal in the sidebar to assess its effect on the supplier network.")
-    show_workflow_progress()
-    disruption_col, map_col, intel_col = st.columns([2.2, 6, 2.2], gap="medium")
-    with disruption_col:
-        with st.container(border=True):
-            st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
-            st.markdown("#### Disruption intelligence")
-            st.info("No analysis is selected. Choose a demo signal, paste an alert, or select a supplier report in the sidebar.")
+    with header_area:
+        st.title("ReRoute ")
+        st.caption("Supply Chain Resilience")
+        st.caption("Select a signal on the left to assess its effect on the supplier network.")
+    with left_card:
+        st.divider()
+        st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
+        st.markdown("#### Disruption intelligence")
+        st.info("No analysis is selected. Choose a demo signal, paste an alert, or select a supplier report above.")
     with map_col:
         network_map()
-    with intel_col:
-        with st.container(border=True):
-            st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
-            st.markdown("#### Network command")
-            st.caption("Supplier and plant locations across the current network.")
-            show_map_legend()
+    with intel_card:
+        st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
+        st.markdown("#### Network command")
+        st.caption("Supplier and plant locations across the current network.")
+        show_map_legend()
+    show_workflow_progress()
     show_received_supplier_reports()
+    page_footer(STATUS)
     st.stop()
 
 ev, imp, plans, s = res["event"], res["impact"], res["plans"], res["impact"]["summary"]
 title = f"{ev.event_type.title()}" + (f" · {ev.location}" if ev.location else "") + (f" · {ev.state}" if ev.scope == "state" else "")
-st.markdown("OPERATIONS  /  SOUTH INDIA NETWORK")
-st.title(title if ev.relevant else "No disruption detected")
-st.caption("Kaveri EV Motors · Supply Chain Resilience")
 tm = res["timings_ms"]
 plan_ms = tm["total"] - tm["explain"]   # detection (if any) + tracing + planning; the explanation is separate
 starts = (f" from {pd.Timestamp(s['starts_on']):%d %b}" if getattr(ev, "starts_in_days", 0) else "")
-st.caption(f"{ev.text}  \nDetected by: {ev.method} · expected {ev.duration_days} days{starts} · severity {ev.severity}/5 · "
-           f"{plan_ms:.0f} ms to a ranked plan · {tm['total']:.0f} ms total · explanation by "
-           f"{'Generative AI Hub' if res.get('explain_method') == 'llm' else 'template'} "
-           f"in {tm['explain'] / 1000:.1f} s")
+with header_area:
+    st.markdown("OPERATIONS")
+    st.title(title if ev.relevant else "No disruption detected")
+    st.caption("Kaveri EV Motors · Supply Chain Resilience")
+    st.caption(f"{ev.text}  \nDetected by: {ev.method} · expected {ev.duration_days} days{starts} · severity {ev.severity}/5 · "
+               f"{plan_ms:.0f} ms to a ranked plan · {tm['total']:.0f} ms total · explanation by "
+               f"{'Generative AI Hub' if res.get('explain_method') == 'llm' else 'template'} "
+               f"in {tm['explain'] / 1000:.1f} s")
 workflow_progress_slot = st.empty()
 show_workflow_progress(res, workflow_progress_slot)
 show_received_supplier_reports(collapsed=True)
 
 if ev.relevant and s.get("on_watch"):
     st.info(explain.watch_text(imp))
-    disruption_col, map_col, intel_col = st.columns([2.2, 6, 2.2], gap="medium")
-    with disruption_col:
-        with st.container(border=True):
-            st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
-            st.markdown("#### Disruption profile")
-            st.markdown(f"**IMD yellow alert · {ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
-            st.caption(f"Severity {ev.severity}/5 · {ev.duration_days} days{starts}")
-            st.markdown("#### Signal")
-            st.write(ev.text)
+    with left_card:
+        st.divider()
+        st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
+        st.markdown("#### Disruption profile")
+        st.markdown(f"**IMD yellow alert · {ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
+        st.caption(f"Severity {ev.severity}/5 · {ev.duration_days} days{starts}")
+        st.markdown("#### Signal")
+        st.write(ev.text)
     with map_col:
         network_map(pd.DataFrame([{"supplier_id": m["supplier_id"], "via": "on watch"} for m in ev.matched]))
-    with intel_col:
-        with st.container(border=True):
-            st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
-            st.markdown("#### Network command")
-            st.caption("Amber: suppliers on watch. Nothing is replanned for a yellow alert.")
-            show_map_legend()
+    with intel_card:
+        st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
+        st.markdown("#### Network command")
+        st.caption("Amber: suppliers on watch. Nothing is replanned for a yellow alert.")
+        show_map_legend()
+    page_footer(STATUS)
     st.stop()
 
 if not ev.relevant or not ev.matched:
     st.info("This signal doesn't touch any supplier in our network, so there is nothing to replan.")
-    disruption_col, map_col, intel_col = st.columns([2.2, 6, 2.2], gap="medium")
-    with disruption_col:
-        with st.container(border=True):
-            st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
-            st.markdown("#### Disruption profile")
-            kind = ev.event_type.title() if ev.relevant and ev.event_type not in ("", "none") else "Not a disruption"
-            st.markdown(f"**{kind}**  \n{ev.location or ev.state or 'Network-wide'}")
-            st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days")
-            st.markdown("#### Signal")
-            st.write(ev.text)
-            st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to classify")
-    with map_col:
-        network_map()
-    with intel_col:
-        with st.container(border=True):
-            st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
-            st.markdown("#### Network command")
-            st.caption("No suppliers in the current network match this signal.")
-            show_map_legend()
-    st.stop()
-
-with st.container(border=True):
-    st.markdown("##### NETWORK COMMAND  /  LIVE EXPOSURE")
-    show_operational_strip(s)
-    disruption_col, map_col, intel_col = st.columns([2.2, 6, 2.2], gap="medium")
-    with disruption_col:
+    with left_card:
+        st.divider()
         st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
         st.markdown("#### Disruption profile")
-        st.markdown(f"**{ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
-        st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days{starts}")
+        kind = ev.event_type.title() if ev.relevant and ev.event_type not in ("", "none") else "Not a disruption"
+        st.markdown(f"**{kind}**  \n{ev.location or ev.state or 'Network-wide'}")
+        st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days")
         st.markdown("#### Signal")
         st.write(ev.text)
-        st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to a ranked plan")
+        st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to classify")
     with map_col:
-        with st.container(border=True):
-            st.markdown("#### Supply network")
-            route_area = st.container()     # filled at the end of the page, so an approval on this run shows at once
-    with intel_col:
+        network_map()
+    with intel_card:
         st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
         st.markdown("#### Network command")
-        st.caption("Supplier impact and the routes of the plan picked above the map.")
-        legend_area = st.container()
+        st.caption("No suppliers in the current network match this signal.")
+        show_map_legend()
+    page_footer(STATUS)
+    st.stop()
+
+with left_card:
+    st.divider()
+    st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
+    st.markdown("#### Disruption profile")
+    st.markdown(f"**{ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
+    st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days{starts}")
+    st.markdown("#### Signal")
+    st.write(ev.text)
+    st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to a ranked plan")
+with map_col:
+    with st.container(border=True):
+        st.markdown("#### Supply network")
+        route_area = st.container()     # filled at the end of the page, so an approval on this run shows at once
+with intel_card:
+    st.markdown("##### NETWORK COMMAND  /  LIVE EXPOSURE")
+    show_operational_strip(s)
+    st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
+    st.markdown("#### Network command")
+    st.caption("Supplier impact and the routes of the plan picked above the map.")
+    legend_area = st.container()
 
 tab_impact, tab_risk, tab_plan, tab_ask, tab_done = st.tabs(
     ["Impact", "Customer Order Risk Analysis", "Recovery plans", "Ask ReRoute", "Approved actions"])
@@ -1294,3 +1369,5 @@ with route_area:
                     hide_index=True, width="stretch")
 with legend_area:
     map_legend(r, is_approved)
+
+page_footer(STATUS)
