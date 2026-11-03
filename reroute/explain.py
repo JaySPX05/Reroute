@@ -41,6 +41,35 @@ def inr(x: float) -> str:
     return f"Rs {x:,.0f}"
 
 
+# ---- plan figures for display: a tariff makes nothing late, so "0 of 0" would read like a fault
+def delay_avoided_text(t: dict) -> str:
+    return f"{t['delay_avoided_days']} of {t['late_days_before']}" if t.get("late_days_before") else "No late orders"
+
+
+def high_priority_text(t: dict) -> str:
+    return (f"{t['high_priority_protected']} of {t['high_priority_affected']}" if t.get("high_priority_affected")
+            else "None at risk")
+
+
+def cost_avoided_text(t: dict) -> str:
+    """Only a tariff has a cost to avoid (the higher duty); for a delay event the figure would just be minus the extra cost."""
+    return inr(t["cost_avoided"]) if t.get("cost_if_wait", 0) > 0 else "n/a"
+
+
+def same_plans_note(plans: list) -> str:
+    """A note when all plans make exactly the same changes, so identical rows don't look like a fault."""
+    if len(plans) < 2:
+        return ""
+    keys = [tuple(sorted(zip(p["actions"]["po_id"], p["actions"]["action"], p["actions"]["to_supplier"])))
+            if len(p["actions"]) else () for p in plans]
+    if len(set(keys)) > 1:
+        return ""
+    if all(p["totals"].get("late_days_before", 0) == 0 for p in plans):
+        return ("All three plans make the same changes: nothing is late, so they differ only on cost, "
+                "and every weighting picks the cheapest way to avoid the extra cost.")
+    return "All three plans make the same changes for this event."
+
+
 def facts(impact: dict, plans: list) -> dict:
     e = impact["event"]
     out = {

@@ -54,7 +54,9 @@ def _plant_km(supplier_id, tables) -> float:
 
 PLAN_WEIGHTS = {
     "Fastest recovery": {"cost": 0.10, "delay": 0.55, "service": 0.35},
-    "Lowest cost": {"cost": 0.65, "delay": 0.15, "service": 0.20},
+    # cost still leads, but delay and service weigh enough that a cheap expedite or switch beats waiting:
+    # with 0.65 / 0.15 / 0.20 waiting (Rs 0) always won and the plan never changed anything
+    "Lowest cost": {"cost": 0.50, "delay": 0.20, "service": 0.30},
     "Balanced": config.WEIGHTS_BALANCED,
 }
 

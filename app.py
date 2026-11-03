@@ -139,7 +139,12 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
     overflow: visible !important;
     text-overflow: clip !important;
 }}
-[data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; }}
+[data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; font-size: clamp(1.3rem, 1.9vw, 2.1rem); line-height: 1.2; }}
+[data-testid="stMetricValue"] * {{
+    white-space: normal !important;   /* "Rs 31.46 lakh", "No late orders": wrap instead of "Rs 31.46 la..." */
+    overflow: visible !important;
+    text-overflow: clip !important;
+}}
 [data-testid="stMetricDelta"] {{ font-size: .75rem; }}
 .rr-workflow {{
     display: grid;
@@ -887,8 +892,8 @@ def show_reports_at_a_glance(reports: pd.DataFrame):
             "Customer orders late": s.get("sales_orders_late", 0),
             "High-priority late": s.get("high_priority_late", 0),
             "Recommended plan: extra cost": explain.inr(t.get("extra_cost", 0)),
-            "Order-days avoided": f"{t.get('delay_avoided_days', 0)} of {t.get('late_days_before', 0)}",
-            "High-priority kept on time": f"{t.get('high_priority_protected', 0)} of {t.get('high_priority_affected', 0)}",
+            "Order-days avoided": explain.delay_avoided_text({"delay_avoided_days": 0, "late_days_before": 0, **t}),
+            "High-priority kept on time": explain.high_priority_text({"high_priority_protected": 0, "high_priority_affected": 0, **t}),
         })
     st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
     st.caption("Each report is analysed on its own, newest first. To see a report's three plans and approve one, "
@@ -993,6 +998,9 @@ with tab_plan:
     else:
         st.info(res["explanation"] + f"\n\n_Written by: {'Generative AI Hub' if res['explain_method'] == 'llm' else 'offline template'}_")
 
+        note = explain.same_plans_note(plans)
+        if note:
+            st.caption(note)
         for p in plans:
             t = p["totals"]
 
@@ -1005,14 +1013,8 @@ with tab_plan:
                 c1, c2, c3, c4 = st.columns(4)
 
                 c1.metric("Extra cost", explain.inr(t["extra_cost"]))
-                c2.metric(
-                    "Order-days of delay avoided",
-                    f"{t['delay_avoided_days']} of {t['late_days_before']}"
-                )
-                c3.metric(
-                    "High-priority orders on time",
-                    f"{t['high_priority_protected']} of {t['high_priority_affected']}"
-                )
+                c2.metric("Order-days of delay avoided", explain.delay_avoided_text(t))
+                c3.metric("High-priority orders on time", explain.high_priority_text(t))
                 c4.metric("Purchase orders changed", t["pos_changed"])
 
                 b = logistics.cost_breakdown(T, imp, p)
