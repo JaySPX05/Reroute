@@ -14,35 +14,51 @@ from reroute import config, db, explain, llm, network
 st.set_page_config(page_title="Live showcase · ReRoute", layout="wide")
 _theme_context = getattr(getattr(st, "context", None), "theme", None)
 LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
-palette = {
-    "page": "#E7EFEE" if LIGHT_MODE else "#061820",
-    "panel": "#FFFFFF" if LIGHT_MODE else "#0B2C36",
-    "panel_soft": "#F0F7F5" if LIGHT_MODE else "#103743",
-    "text": "#0B2932" if LIGHT_MODE else "#E8F4F6",
-    "muted": "#547078" if LIGHT_MODE else "#B0C7CE",
-    "accent": "#007E8A" if LIGHT_MODE else "#00D9E8",
-    "on_accent": "#FFFFFF" if LIGHT_MODE else "#03262B",
-    "teal": "#087F73" if LIGHT_MODE else "#20C6B7",
-    "border": "rgba(0, 126, 138, .30)" if LIGHT_MODE else "rgba(0, 217, 232, .28)",
-    "danger": "#C13F55" if LIGHT_MODE else "#FF5C70",
-    "warning": "#8A5600" if LIGHT_MODE else "#F4B942",
-    "success": "#187A5B" if LIGHT_MODE else "#32D296",
-    "sidebar": "#E0ECEA" if LIGHT_MODE else "#041319",
-    "sidebar_text": "#18363D" if LIGHT_MODE else "#C5D8DC",
-    "card": "#FFFFFF" if LIGHT_MODE else "#0B2831",
+palette = {   # ReRoute colour system (dark navy, teal, cyan); light-mode value first
+    "page": "#EEF2F5" if LIGHT_MODE else "#07111F",          # main background
+    "elevated": "#F5F7F9" if LIGHT_MODE else "#0A1728",      # elevated background
+    "panel": "#FFFFFF" if LIGHT_MODE else "#0D1B2D",         # panel background
+    "panel_hover": "#F8FAFB" if LIGHT_MODE else "#102238",
+    "panel_soft": "#EDF3F5" if LIGHT_MODE else "#12253A",    # strong panel surface
+    "text": "#102435" if LIGHT_MODE else "#F1F6FA",          # primary text
+    "muted": "#536877" if LIGHT_MODE else "#9EAFBE",         # secondary text
+    "faint": "#81919C" if LIGHT_MODE else "#6E8295",         # muted text
+    "accent": "#078AAA" if LIGHT_MODE else "#2AC7E8",        # cyan highlight
+    "on_accent": "#FFFFFF" if LIGHT_MODE else "#07111F",
+    "teal": "#087D73" if LIGHT_MODE else "#13B8A6",          # primary teal
+    "teal_hover": "#066B63" if LIGHT_MODE else "#19CBB7",
+    "teal_surface": "#EDF3F5" if LIGHT_MODE else "#063F3B",  # dark teal surface
+    "border": "#D7E0E5" if LIGHT_MODE else "#203247",
+    "border_subtle": "#E7ECEF" if LIGHT_MODE else "#172A3E",
+    "danger": "#C43D3D" if LIGHT_MODE else "#F06565",        # critical
+    "warning": "#A46608" if LIGHT_MODE else "#F0B44A",
+    "success": "#168558" if LIGHT_MODE else "#35CF8D",
+    "input": "#F8FAFB" if LIGHT_MODE else "#091625",
+    "map_bg": "#E7ECEC" if LIGHT_MODE else "#091827",
+    "sidebar": "#F5F7F9" if LIGHT_MODE else "#0A1728",
+    "sidebar_text": "#536877" if LIGHT_MODE else "#9EAFBE",
+    "card": "#FFFFFF" if LIGHT_MODE else "#0D1B2D",
 }
 st.markdown(
     f"""<style>
 :root {{
     --rr-page: var(--st-background-color, {palette["page"]});
     --rr-panel: var(--st-secondary-background-color, {palette["panel"]});
-    --rr-panel-soft: color-mix(in srgb, var(--rr-panel) 76%, var(--rr-page));
+    --rr-panel-soft: {palette["panel_soft"]};
+    --rr-panel-hover: {palette["panel_hover"]};
+    --rr-elevated: {palette["elevated"]};
+    --rr-input: {palette["input"]};
+    --rr-map-bg: {palette["map_bg"]};
+    --rr-border-subtle: {palette["border_subtle"]};
     --rr-text: var(--st-text-color, {palette["text"]});
-    --rr-muted: color-mix(in srgb, var(--rr-text) 68%, var(--rr-panel));
-    --rr-accent: color-mix(in srgb, var(--rr-text) 58%, #00D9E8 42%);
-    --rr-button-bg: #006B75;
-    --rr-button-text: #FFFFFF;
-    --rr-teal: #20C6B7;
+    --rr-muted: {palette["muted"]};
+    --rr-faint: {palette["faint"]};
+    --rr-accent: {palette["accent"]};
+    --rr-button-bg: {palette["teal"]};
+    --rr-button-text: {palette["on_accent"]};
+    --rr-teal: {palette["teal"]};
+    --rr-teal-hover: {palette["teal_hover"]};
+    --rr-teal-surface: {palette["teal_surface"]};
     --rr-border: var(--st-border-color, {palette["border"]});
     --rr-danger: var(--st-red-color, {palette["danger"]});
     --rr-warning: var(--st-yellow-color, {palette["warning"]});
@@ -238,26 +254,26 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stButton"] button[kind="primary"],
 [data-testid="stFormSubmitButton"],
 [data-testid="stFormSubmitButton"] button {{
-    background: #006B75 !important;
-    border-color: #006B75 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal) !important;
+    border-color: var(--rr-teal) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:hover,
 [data-testid="stFormSubmitButton"]:hover,
 [data-testid="stFormSubmitButton"] button:hover {{
-    background: #005761 !important;
-    border-color: #005761 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal-hover) !important;
+    border-color: var(--rr-teal-hover) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:active,
 [data-testid="stFormSubmitButton"]:active,
 [data-testid="stFormSubmitButton"] button:active {{
-    background: #004B53 !important;
-    border-color: #004B53 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-teal-hover) !important;
+    border-color: var(--rr-teal-hover) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
 }}
 [data-testid="stButton"] button[kind="primary"]:focus-visible,
 [data-testid="stFormSubmitButton"]:focus-visible,
@@ -268,10 +284,10 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stButton"] button[kind="primary"]:disabled,
 [data-testid="stFormSubmitButton"]:disabled,
 [data-testid="stFormSubmitButton"] button:disabled {{
-    background: #526F73 !important;
-    border-color: #526F73 !important;
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    background: var(--rr-faint) !important;
+    border-color: var(--rr-faint) !important;
+    color: var(--rr-button-text) !important;
+    -webkit-text-fill-color: var(--rr-button-text) !important;
     opacity: 1 !important;
     cursor: not-allowed;
 }}
@@ -317,7 +333,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
 [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] [role="combobox"] {{
     color: var(--rr-text);
-    background: var(--rr-panel-soft);
+    background: var(--rr-input);
     border-color: var(--rr-border);
     border-radius: 4px;
 }}
@@ -330,7 +346,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 [data-testid="stSelectbox"] [role="combobox"] {{
     color: var(--rr-text) !important;
     -webkit-text-fill-color: var(--rr-text);
-    background: var(--rr-panel-soft) !important;
+    background: var(--rr-input) !important;
     border-color: var(--rr-border) !important;
 }}
 input::placeholder, textarea::placeholder {{
@@ -404,6 +420,49 @@ hr {{ border-color: var(--rr-border); }}
     unsafe_allow_html=True,
 )
 
+
+# ------------------------------------------------------------------ top navigation
+# The three pages sit in a horizontal bar at the top instead of the sidebar list
+# (.streamlit/config.toml turns the sidebar page list off). Same block in all three pages.
+def top_nav(active: str):
+    st.markdown("""<style>
+.rr-brand {{ font-family: "Bahnschrift", "Avenir Next", "Segoe UI", sans-serif; font-size: 1.4rem;
+            font-weight: 750; letter-spacing: -.04em; color: var(--rr-text); white-space: nowrap; }}
+.rr-brand span {{ color: var(--rr-accent); }}
+.st-key-rr_topnav .rr-brand {{ line-height: 1; transform: translateY(-.4rem); }}   /* level with the page links */
+.st-key-rr_topnav {{ border-bottom: 1px solid var(--rr-border); padding-bottom: .35rem; margin-bottom: .6rem; }}
+.st-key-rr_topnav [data-testid="stPageLink"] {{ display: flex; justify-content: center; }}
+.st-key-rr_topnav [class*="st-key-rr_nav_"] {{ align-items: center; }}
+.st-key-rr_topnav [data-testid="stPageLink"] a {{ justify-content: center; border-radius: 6px; }}
+.st-key-rr_topnav [data-testid="stPageLink"] a:hover {{ background: color-mix(in srgb, var(--rr-accent) 12%, transparent); }}
+.st-key-rr_nav_active [data-testid="stPageLink"] a {{
+    background: color-mix(in srgb, var(--rr-accent) 15%, transparent);
+    border-bottom: 2px solid var(--rr-accent); border-radius: 6px 6px 0 0; }}
+.st-key-rr_nav_active [data-testid="stPageLink"] a p {{ color: var(--rr-text); font-weight: 650; }}
+</style>""".format(), unsafe_allow_html=True)
+    links = [("app", "app.py", "app", ":material/hub:"),
+             ("report", "pages/1_Supplier_report.py", "Supplier report", ":material/report:"),
+             ("showcase", "pages/2_Live_showcase.py", "Live showcase", ":material/auto_awesome:"),
+             ("about", "pages/3_About.py", "About", ":material/info:")]
+    with st.container(key="rr_topnav"):
+        # logo on the left; the page links in the middle
+        cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.5, 1.6], vertical_alignment="center")
+        cols[0].markdown('<div class="rr-brand">Re<span>Route</span></div>', unsafe_allow_html=True)
+        for col, (name, page, label, icon) in zip(cols[1:5], links):
+            with col.container(key="rr_nav_active" if name == active else f"rr_nav_{name}"):
+                st.page_link(page, label=label, icon=icon)
+
+def page_footer(lines):
+    """The page's status details, shown at the bottom of the page."""
+    st.divider()
+    for line in lines:
+        st.caption(line)
+
+
+top_nav("showcase")
+STATUS = (f"Database: {'SAP HANA Cloud' if db.backend() == 'hana' else 'SQLite (local)'}",
+          f"Language model: {llm.status()}")
+
 STEPS = {
     "port": ("Day 1 · Port notice", "port_notice",
              "Chennai Port Authority: cyclone warning, all container terminal operations suspended for 8 days. "
@@ -432,7 +491,7 @@ def tables():
 
 def graph_dot(active=None) -> str:
     sender, recipient = active if active else (None, None)
-    node_fill = "#F4FCFC" if LIGHT_MODE else "#0D303B"
+    node_fill = palette["panel_soft"]
     node_text = palette["text"]
     node_border = palette["accent"]
     edge_color = palette["muted"]
@@ -440,17 +499,17 @@ def graph_dot(active=None) -> str:
              f'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=16, margin="0.12,0.06", color="{node_border}", fillcolor="{node_fill}", fontcolor="{node_text}"];',
              f'edge [color="{edge_color}", arrowsize=0.8];']
     for key, (name, role) in network.AGENTS.items():
-        fill = ("#F4B942" if LIGHT_MODE else "#9E7020") if key == recipient else (
-            "#20C6B7" if LIGHT_MODE else "#087D86") if key == sender else (
-            ("#D9F2E7" if LIGHT_MODE else "#145241") if key == "planner" else node_fill)
+        fill = ("#F6E3C2" if LIGHT_MODE else "#5A4318") if key == recipient else (        # warning tint
+            ("#CDEDEA" if LIGHT_MODE else "#0B5E56") if key == sender else (                # teal tint
+            palette["teal_surface"] if key == "planner" else node_fill))
         pen = 2.5 if key in (sender, recipient) else 1
         lines.append(f'{key} [label=<<b>{name}</b><br/><font point-size="12">{role}</font>>, '
                      f'fillcolor="{fill}", color="{node_border}", fontcolor="{node_text}", penwidth={pen}];')
     for a, b in EDGES:
         hot = (a, b) == (sender, recipient)
-        lines.append(f'{a} -> {b} [color="{"#FF5C70" if hot and not LIGHT_MODE else "#C13F55" if hot else edge_color}", penwidth={3 if hot else 1}];')
+        lines.append(f'{a} -> {b} [color="{palette["danger"] if hot else edge_color}", penwidth={3 if hot else 1}];')
     if active and (sender, recipient) not in EDGES:
-        lines.append(f'{sender} -> {recipient} [color="{("#C13F55" if LIGHT_MODE else "#FF5C70")}", penwidth=3, style=dashed];')
+        lines.append(f'{sender} -> {recipient} [color="{palette["danger"]}", penwidth=3, style=dashed];')
     lines.append('{rank=same; policy; planner;}')
     lines.append("}")
     return "\n".join(lines)
@@ -523,22 +582,17 @@ def show_simulation_metrics(net, slots):
 
 # ------------------------------------------------------------------ sidebar and page controls
 status_when_drawn = st.session_state.sim_status
-scenario = st.sidebar.selectbox("Disruption", list(SCENARIOS))
-speed = st.sidebar.slider("Seconds per agent message", 0.0, 2.0, 0.7, 0.1)
-st.sidebar.divider()
-st.sidebar.caption("Autonomy limits (Policy agent)")
-st.sidebar.write(f"- High-priority customer orders always go to a human\n"
-                 f"- Extra cost above {explain.inr(config.AUTO_COST_LIMIT_INR)} goes to a human\n"
-                 f"- Moving more than {explain.inr(config.BIG_SWITCH_LIMIT_INR)} of business goes to a human")
-st.sidebar.divider()
-st.sidebar.caption(f"Database: {'SAP HANA Cloud' if db.backend() == 'hana' else 'SQLite (local)'}")
-st.sidebar.caption(f"Language model: {llm.status()}")
-
-heading_col, start_col, stop_col, reset_col = st.columns([5, 1.8, 1.2, 1], gap="small")
+# header on the left; the simulation controls in one box on the right (as in the design)
+heading_col, controls_col = st.columns([5, 4.6], gap="medium", vertical_alignment="center")
 with heading_col:
     st.markdown("OPERATIONS CENTER  /  AGENT NETWORK")
     st.title("Live Operations Showcase")
     st.caption("Observe the existing agent workflow from disruption signal to Human Planner decision.")
+with controls_col.container(border=True, key="rr_sim_controls"):
+    pick_col, speed_col = st.columns([1.3, 1], gap="small")
+    scenario = pick_col.selectbox("Disruption", list(SCENARIOS))
+    speed = speed_col.slider("Seconds per agent message", 0.0, 2.0, 0.7, 0.1)
+    start_col, stop_col, reset_col = st.columns([1.8, 1.2, 1], gap="small")
 start = start_col.button("Start Simulation", type="primary",
                          disabled=st.session_state.sim_status == "Running", width="stretch")
 stop = stop_col.button("Stop", disabled=st.session_state.sim_status != "Running", width="stretch")
@@ -576,28 +630,36 @@ if stop and st.session_state.sim_status == "Running":
 
 # ------------------------------------------------------------------ layout
 banner = st.empty()
+# three boxes, as in the design: agent topology | live activity | human oversight
+left, centre, right = st.columns([3.2, 5.2, 3.2], gap="small")
+with left:
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">AUTOMATED WORKFLOW</div>', unsafe_allow_html=True)
+        st.subheader("Agent topology")
+        graph_slot = st.empty()
+with centre:
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">AGENT COMMUNICATION</div>', unsafe_allow_html=True)
+        st.subheader("Live activity")
+        feed_slot = st.empty()
+with right:
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">HUMAN CHECKPOINT</div>', unsafe_allow_html=True)
+        st.subheader("Human oversight")
+        oversight_slot = st.empty()
+        st.divider()
+        st.caption("Autonomy limits (Policy agent)")
+        st.write(f"- High-priority customer orders always go to a human\n"
+                 f"- Extra cost above {explain.inr(config.AUTO_COST_LIMIT_INR)} goes to a human\n"
+                 f"- Moving more than {explain.inr(config.BIG_SWITCH_LIMIT_INR)} of business goes to a human")
+
+# run metrics below the three boxes, above the tabs
 with st.container(border=True):
     st.markdown('<div class="rr-section-kicker">RUN PERFORMANCE</div>', unsafe_allow_html=True)
     performance_slots = [c.empty() for c in st.columns(4, gap="small", border=True)]
     st.divider()
     st.markdown('<div class="rr-section-kicker">AGENT METRICS</div>', unsafe_allow_html=True)
     kpi_slots = [c.empty() for c in st.columns(5, gap="small", border=True)]
-
-left, right = st.columns([4, 8], gap="small")   # the message feed keeps two thirds of the width
-with left:
-    with st.container(border=True):
-        st.markdown('<div class="rr-section-kicker">AUTOMATED WORKFLOW</div>', unsafe_allow_html=True)
-        st.subheader("Agent topology")
-        graph_slot = st.empty()
-    with st.container(border=True):
-        st.markdown('<div class="rr-section-kicker">HUMAN CHECKPOINT</div>', unsafe_allow_html=True)
-        st.subheader("Human oversight")
-        oversight_slot = st.empty()
-with right:
-    with st.container(border=True):
-        st.markdown('<div class="rr-section-kicker">AGENT COMMUNICATION</div>', unsafe_allow_html=True)
-        st.subheader("Live activity")
-        feed_slot = st.empty()
 
 # ------------------------------------------------------------------ advance one safe agent-message boundary per rerun
 net = st.session_state.get("net")
@@ -645,6 +707,7 @@ show_simulation_metrics(net, performance_slots)
 if not net:
     banner.info("Pick a disruption in the sidebar and press **Start Simulation**.")
     show_graph(graph_slot)
+    page_footer(STATUS)
     st.stop()
 
 show_graph(graph_slot, st.session_state.get("last"))
@@ -806,3 +869,5 @@ with tab_sap:
     if len(done):
         st.caption("Latest S/4HANA request prepared by the Execution agent (the sandbox is read-only, so it is not sent):")
         st.code(json.dumps(json.loads(done.iloc[-1]["s4_request"]), indent=2), language="json")
+
+page_footer(STATUS)
