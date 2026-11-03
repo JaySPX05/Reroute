@@ -6,7 +6,7 @@ import streamlit as st
 
 from reroute import agent, db
 
-st.set_page_config(page_title="Report a problem · ReRoute", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Report a problem · ReRoute")
 _theme_context = getattr(getattr(st, "context", None), "theme", None)
 LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
 palette = {
@@ -56,7 +56,7 @@ st.markdown(
 }}
 [data-testid="stMainBlockContainer"], .main .block-container {{
     max-width: 1680px;
-    padding: 1.05rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;
+    padding: 4.25rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;   /* clear of the Streamlit top bar, which takes clicks */
 }}
 [data-testid="stHeader"] {{ background: transparent; }}
 [data-testid="stMainBlockContainer"] > div {{ animation: rr-arrive .42s ease-out both; }}
@@ -379,7 +379,7 @@ a {{ color: var(--rr-accent); }}
 hr {{ border-color: var(--rr-border); }}
 :focus-visible {{ outline: 2px solid var(--rr-accent) !important; outline-offset: 2px; }}
 @media (max-width: 800px) {{
-    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: .8rem .7rem 1.5rem; }}
+    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: 3.75rem .7rem 1.5rem; }}
     [data-testid="stMetric"] {{ min-height: 78px; padding: .55rem; }}
 }}
 @media (prefers-reduced-motion: reduce) {{

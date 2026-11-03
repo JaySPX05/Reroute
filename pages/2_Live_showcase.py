@@ -11,7 +11,7 @@ import streamlit as st
 
 from reroute import config, db, explain, llm, network
 
-st.set_page_config(page_title="Live showcase · ReRoute", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Live showcase · ReRoute", layout="wide")
 _theme_context = getattr(getattr(st, "context", None), "theme", None)
 LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
 palette = {
@@ -61,7 +61,7 @@ st.markdown(
 }}
 [data-testid="stMainBlockContainer"], .main .block-container {{
     max-width: 1680px;
-    padding: 1.05rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;
+    padding: 4.25rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;   /* clear of the Streamlit top bar, which takes clicks */
 }}
 [data-testid="stHeader"] {{ background: transparent; }}
 [data-testid="stMainBlockContainer"] > div {{ animation: rr-arrive .42s ease-out both; }}
@@ -133,6 +133,11 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
     font-weight: 700;
     letter-spacing: .08em;
     text-transform: uppercase;
+}}
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{
+    white-space: normal !important;   /* wrap long labels instead of cutting them off with "..." */
+    overflow: visible !important;
+    text-overflow: clip !important;
 }}
 [data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; }}
 [data-testid="stMetricDelta"] {{ font-size: .75rem; }}
@@ -384,7 +389,7 @@ a {{ color: var(--rr-accent); }}
 hr {{ border-color: var(--rr-border); }}
 :focus-visible {{ outline: 2px solid var(--rr-accent) !important; outline-offset: 2px; }}
 @media (max-width: 800px) {{
-    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: .8rem .7rem 1.5rem; }}
+    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: 3.75rem .7rem 1.5rem; }}
     [data-testid="stMetric"] {{ min-height: 78px; padding: .55rem; }}
 }}
 @media (prefers-reduced-motion: reduce) {{
@@ -573,22 +578,21 @@ with st.container(border=True):
     st.markdown('<div class="rr-section-kicker">AGENT METRICS</div>', unsafe_allow_html=True)
     kpi_slots = [c.empty() for c in st.columns(5, gap="small", border=True)]
 
-left, center, right = st.columns([3, 5, 3], gap="small")
+left, right = st.columns([4, 8], gap="small")   # the message feed keeps two thirds of the width
 with left:
     with st.container(border=True):
         st.markdown('<div class="rr-section-kicker">AUTOMATED WORKFLOW</div>', unsafe_allow_html=True)
         st.subheader("Agent topology")
         graph_slot = st.empty()
-with center:
-    with st.container(border=True):
-        st.markdown('<div class="rr-section-kicker">AGENT COMMUNICATION</div>', unsafe_allow_html=True)
-        st.subheader("Live activity")
-        feed_slot = st.empty()
-with right:
     with st.container(border=True):
         st.markdown('<div class="rr-section-kicker">HUMAN CHECKPOINT</div>', unsafe_allow_html=True)
         st.subheader("Human oversight")
         oversight_slot = st.empty()
+with right:
+    with st.container(border=True):
+        st.markdown('<div class="rr-section-kicker">AGENT COMMUNICATION</div>', unsafe_allow_html=True)
+        st.subheader("Live activity")
+        feed_slot = st.empty()
 
 # ------------------------------------------------------------------ advance one safe agent-message boundary per rerun
 net = st.session_state.get("net")
@@ -646,15 +650,24 @@ with oversight_slot.container():
     status = st.session_state.sim_status
     st.caption(f"Simulation status · {status}")
     st.metric("Actions awaiting decision", len(net.pending))
-    current_plans = [plan for event in net.events.values() for plan in event.get("plans", [])]
-    recommended_plan = next((plan for plan in current_plans if plan.get("recommended")), None)
-    if recommended_plan:
-        st.markdown("**Recommended recovery plan**")
-        st.write(recommended_plan["name"])
-        totals = recommended_plan.get("totals", {})
-        if "extra_cost" in totals:
-            st.caption(f"Extra cost · {explain.inr(totals['extra_cost'])}")
-    elif current_plans:
+    # one recommended plan per disruption: a chained run has several, so list each one
+    recommended = []
+    for state in net.events.values():
+        plan = next((p for p in state.get("plans", []) if p.get("recommended")), None)
+        if plan:
+            ev = state["event"]
+            where = ev.location or getattr(ev, "state", "") or ""
+            recommended.append((f"{ev.event_type.title()}" + (f" · {where}" if where else ""), plan))
+    if recommended:
+        st.markdown("**Recommended recovery plans**" if len(recommended) > 1 else "**Recommended recovery plan**")
+        for label, plan in recommended:
+            t = plan.get("totals", {})
+            if t.get("cost_if_wait", 0) > 0:   # tariff: the duty is paid either way, so show what the plan saves
+                cost = f"saves {explain.inr(t.get('cost_avoided', 0))} of {explain.inr(t['cost_if_wait'])} extra duty"
+            else:
+                cost = f"extra cost {explain.inr(t.get('extra_cost', 0))}"
+            st.caption(f"{label}: {plan['name']} · {cost}")
+    elif any(state.get("plans") for state in net.events.values()):
         st.caption("No recommended plan is identified in the current results.")
     else:
         st.caption("Recovery plans are not available yet.")

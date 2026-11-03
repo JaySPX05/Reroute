@@ -11,7 +11,7 @@ import pydeck as pdk
 
 from reroute import agent, config, db, explain, impact, llm, logistics, planner, signals
 
-st.set_page_config(page_title="ReRoute", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="ReRoute", layout="wide")
 _theme_context = getattr(getattr(st, "context", None), "theme", None)
 LIGHT_MODE = getattr(_theme_context, "type", None) == "light"
 palette = {
@@ -61,7 +61,7 @@ st.markdown(
 }}
 [data-testid="stMainBlockContainer"], .main .block-container {{
     max-width: 1680px;
-    padding: 1.05rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;
+    padding: 4.25rem clamp(.85rem, 1.8vw, 1.8rem) 2.5rem;   /* clear of the Streamlit top bar, which takes clicks */
 }}
 [data-testid="stHeader"] {{ background: transparent; }}
 [data-testid="stMainBlockContainer"] > div {{ animation: rr-arrive .42s ease-out both; }}
@@ -133,6 +133,11 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
     font-weight: 700;
     letter-spacing: .08em;
     text-transform: uppercase;
+}}
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {{
+    white-space: normal !important;   /* wrap long labels instead of cutting them off with "..." */
+    overflow: visible !important;
+    text-overflow: clip !important;
 }}
 [data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; }}
 [data-testid="stMetricDelta"] {{ font-size: .75rem; }}
@@ -418,7 +423,7 @@ a {{ color: var(--rr-accent); }}
 hr {{ border-color: var(--rr-border); }}
 :focus-visible {{ outline: 2px solid var(--rr-accent) !important; outline-offset: 2px; }}
 @media (max-width: 800px) {{
-    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: .8rem .7rem 1.5rem; }}
+    [data-testid="stMainBlockContainer"], .main .block-container {{ padding: 3.75rem .7rem 1.5rem; }}
     [data-testid="stMetric"] {{ min-height: 78px; padding: .55rem; }}
 }}
 @media (prefers-reduced-motion: reduce) {{
@@ -947,7 +952,7 @@ if not ev.relevant or not ev.matched:
             st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days")
             st.markdown("#### Signal")
             st.write(ev.text)
-            st.caption(f"Detected by {ev.method} · {res['timings_ms']['total']:.0f} ms to classify")
+            st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to classify")
     with map_col:
         network_map()
     with intel_col:
@@ -969,7 +974,7 @@ with st.container(border=True):
         st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days")
         st.markdown("#### Signal")
         st.write(ev.text)
-        st.caption(f"Detected by {ev.method} · {res['timings_ms']['total']:.0f} ms to plan")
+        st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to a ranked plan")
     with map_col:
         network_map(imp["down"])
     with intel_col:
