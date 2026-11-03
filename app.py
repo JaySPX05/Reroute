@@ -573,8 +573,10 @@ def show_workflow_progress(result: dict | None = None, slot=None):
         ]
         event = result.get("event")
         relevant = getattr(event, "relevant", None) if event is not None else None
+        on_watch = isinstance(result.get("impact"), dict) and result["impact"].get("summary", {}).get("on_watch")
         if isinstance(relevant, bool):
             stages[0] = ("Disruption", "done",
+                         "Yellow alert: on watch" if relevant and on_watch else
                          "Disruption detected" if relevant else "No disruption detected")
         elif event is not None:
             stages[0] = ("Disruption", "done", "Signal analyzed")
@@ -593,15 +595,15 @@ def show_workflow_progress(result: dict | None = None, slot=None):
             except (KeyError, TypeError, ValueError):
                 pass
         if late_count is not None:
-            detail = f"{late_count} late orders" if late_count else "No late orders"
+            detail = (f"{late_count} late order{'' if late_count == 1 else 's'}" if late_count else "No late orders")
             stages[1] = ("Impacted Orders", "done", detail)
 
         plans = result.get("plans")
         plans_available = isinstance(plans, (list, tuple))
-        if plans_available and plans:
-            stages[2] = ("Recovery Plan", "done", f"{len(plans)} plans generated")
-        elif plans_available and pos_risk == 0:
+        if plans_available and pos_risk == 0:            # nothing at risk: plans exist but change nothing
             stages[2] = ("Recovery Plan", "done", "No plan required")
+        elif plans_available and plans:
+            stages[2] = ("Recovery Plan", "done", f"{len(plans)} plans generated")
         elif plans_available:
             stages[2] = ("Recovery Plan", "neutral", "No plans reported")
 
@@ -617,10 +619,10 @@ def show_workflow_progress(result: dict | None = None, slot=None):
             stages[3] = ("Approval", "done", "Plan approved")
         elif approved_name and approved_result is None:
             stages[3] = ("Approval", "neutral", "Status unavailable")
-        elif plans_available and plans:
-            stages[3] = ("Approval", "current", "Awaiting planner approval")
         elif plans_available and pos_risk == 0:
             stages[3] = ("Approval", "done", "Not required")
+        elif plans_available and plans:
+            stages[3] = ("Approval", "current", "Awaiting planner approval")
 
     parts = ['<div class="rr-workflow" role="list" aria-label="Disruption to approval workflow">']
     for index, (label, state, detail) in enumerate(stages, start=1):
@@ -977,13 +979,35 @@ st.title(title if ev.relevant else "No disruption detected")
 st.caption("Kaveri EV Motors · Supply Chain Resilience")
 tm = res["timings_ms"]
 plan_ms = tm["total"] - tm["explain"]   # detection (if any) + tracing + planning; the explanation is separate
-st.caption(f"{ev.text}  \nDetected by: {ev.method} · expected {ev.duration_days} days · severity {ev.severity}/5 · "
+starts = (f" from {pd.Timestamp(s['starts_on']):%d %b}" if getattr(ev, "starts_in_days", 0) else "")
+st.caption(f"{ev.text}  \nDetected by: {ev.method} · expected {ev.duration_days} days{starts} · severity {ev.severity}/5 · "
            f"{plan_ms:.0f} ms to a ranked plan · {tm['total']:.0f} ms total · explanation by "
            f"{'Generative AI Hub' if res.get('explain_method') == 'llm' else 'template'} "
            f"in {tm['explain'] / 1000:.1f} s")
 workflow_progress_slot = st.empty()
 show_workflow_progress(res, workflow_progress_slot)
 show_received_supplier_reports(collapsed=True)
+
+if ev.relevant and s.get("on_watch"):
+    st.info(explain.watch_text(imp))
+    disruption_col, map_col, intel_col = st.columns([2.2, 6, 2.2], gap="medium")
+    with disruption_col:
+        with st.container(border=True):
+            st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
+            st.markdown("#### Disruption profile")
+            st.markdown(f"**IMD yellow alert · {ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
+            st.caption(f"Severity {ev.severity}/5 · {ev.duration_days} days{starts}")
+            st.markdown("#### Signal")
+            st.write(ev.text)
+    with map_col:
+        network_map(pd.DataFrame([{"supplier_id": m["supplier_id"], "via": "on watch"} for m in ev.matched]))
+    with intel_col:
+        with st.container(border=True):
+            st.markdown('<div class="rr-section-kicker">LIVE INTELLIGENCE</div>', unsafe_allow_html=True)
+            st.markdown("#### Network command")
+            st.caption("Amber: suppliers on watch. Nothing is replanned for a yellow alert.")
+            show_map_legend()
+    st.stop()
 
 if not ev.relevant or not ev.matched:
     st.info("This signal doesn't touch any supplier in our network, so there is nothing to replan.")
@@ -1016,7 +1040,7 @@ with st.container(border=True):
         st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
         st.markdown("#### Disruption profile")
         st.markdown(f"**{ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
-        st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days")
+        st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days{starts}")
         st.markdown("#### Signal")
         st.write(ev.text)
         st.caption(f"Detected by {ev.method} · {plan_ms:.0f} ms to a ranked plan")
