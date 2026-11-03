@@ -725,8 +725,12 @@ with tab_q:
                         else f"Expedite PO {a['po_id']} with **{a['from_supplier']}**")
                 st.markdown(f"{what} · {a['qty']} × {a['material']} · customer order {a['sales_order_id']} "
                             f"({a['so_priority']} priority)")
-                st.caption(f"Why it needs you: {a['rule']}. Extra cost {explain.inr(a['extra_cost'])}, "
-                           f"{explain.inr(a['net_cost'])} versus doing nothing. Delay {a['delay_before']} → {a['delay_after']} days.")
+                # versus doing nothing: after a tariff, doing nothing means paying the higher duty
+                versus = ("" if abs(a["net_cost"] - a["extra_cost"]) < 1 else
+                          f", saves {explain.inr(-a['net_cost'])} versus paying the higher duty" if a["net_cost"] < 0
+                          else f", {explain.inr(a['net_cost'])} more than paying the higher duty")
+                st.caption(f"Why it needs you: {a['rule']}. Extra cost {explain.inr(a['extra_cost'])}{versus}. "
+                           f"Delay {a['delay_before']} → {a['delay_after']} days.")
                 r1, r2, r3 = st.columns([4, 1, 1])
                 reason = r1.text_input("Reason (optional)", key=f"reason-{aid}", label_visibility="collapsed",
                                        placeholder="Reason (optional)")

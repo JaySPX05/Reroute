@@ -5,7 +5,7 @@ days_down,suppliers_down,pos_late,plan,pos_changed,extra_cost_lakh,delay_avoided
 5,4,7,Fastest recovery,3,0.88,0 of 0,0 of 0
 5,4,7,Lowest cost,0,0.0,0 of 0,0 of 0
 5,4,7,Balanced,0,0.0,0 of 0,0 of 0
-8,4,14,Fastest recovery,8,2.42,4 of 5,2 of 2
+8,4,14,Fastest recovery,8,2.47,5 of 5,2 of 2
 8,4,14,Lowest cost,2,0.55,3 of 5,2 of 2
 8,4,14,Balanced,4,1.58,5 of 5,2 of 2
 11,4,20,Fastest recovery,13,6.25,19 of 25,3 of 4

@@ -952,7 +952,8 @@ if not ev.relevant or not ev.matched:
         with st.container(border=True):
             st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
             st.markdown("#### Disruption profile")
-            st.markdown(f"**{ev.event_type.title()}**  \n{ev.location or ev.state or 'Network-wide'}")
+            kind = ev.event_type.title() if ev.relevant and ev.event_type not in ("", "none") else "Not a disruption"
+            st.markdown(f"**{kind}**  \n{ev.location or ev.state or 'Network-wide'}")
             st.caption(f"Severity {ev.severity}/5 · expected duration {ev.duration_days} days")
             st.markdown("#### Signal")
             st.write(ev.text)
@@ -1023,7 +1024,9 @@ with tab_plan:
                 with st.expander("Cost breakdown", expanded=p["name"] == st.session_state.get("approved_plan_name")):
                     st.dataframe(logistics.breakdown_table(b, explain.inr), hide_index=True, width="stretch")
 
-                if st.button(
+                if not t["pos_changed"]:
+                    st.caption("Nothing to approve: this plan keeps every purchase order as it is.")
+                elif st.button(
                     f"Approve {p['name']}",
                     key=f"approve-{p['name']}",
                     type="primary" if p.get("recommended") else "secondary"
@@ -1032,12 +1035,15 @@ with tab_plan:
                     st.session_state.approved_plan_name = p["name"]
                     st.session_state.approved_plan_result_ref = res
                     show_workflow_progress(res, workflow_progress_slot)
-                    st.success(
-                        f"Approved. {n} PO changes queued and supplier messages drafted. "
-                        f"Total extra cost {explain.inr(b['total'])}, including "
-                        f"{explain.inr(b['extra_freight'])} extra freight. "
-                        "The map above now shows the new routes; Approved actions has the breakdown."
-                    )
+                    changes = f"{n} PO change{'' if n == 1 else 's'} queued and supplier messages drafted. "
+                    if t.get("cost_if_wait", 0) > 0:   # tariff: the extra cost includes duty paid either way
+                        money = (f"Saves {explain.inr(t['cost_avoided'])} of the {explain.inr(t['cost_if_wait'])} "
+                                 f"extra duty, after {explain.inr(b['extra_freight'])} extra freight. ")
+                    else:
+                        money = (f"Total extra cost {explain.inr(b['total'])}, including "
+                                 f"{explain.inr(b['extra_freight'])} extra freight. ")
+                    st.success("Approved. " + changes + money +
+                               "The map above now shows the new routes; Approved actions has the breakdown.")
 
         for p in plans:
             acts = p["actions"]

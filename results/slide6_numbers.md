@@ -12,9 +12,11 @@ Runs: 5 per scenario.
 
 | Scenario | Time to list affected orders | Time to ranked recovery plan |
 |---|---:|---:|
-| Smelter flood (S20, 8 days) | 17.9 ms | 72.8 ms |
-| Chennai port closure (8 days) | 19.1 ms | 62.8 ms |
-| Li-ion tariff increase (10% to 35%) | 16.0 ms | 133.6 ms |
+| Smelter flood (S20, 8 days) | 23.9 ms | 47.1 ms |
+| Chennai port closure (8 days) | 24.5 ms | 47.4 ms |
+| Li-ion tariff increase (10% to 35%) | 23.7 ms | 47.4 ms |
+
+Measured 3 Nov 2026, after freight costs were added to plans and the planner speed-up (#28).
 
 Across these tested scenarios, ranked-plan execution was under 0.2 seconds. Execution time varies by machine and environment. These are ReRoute execution timings, not manual planning timings.
 
@@ -44,25 +46,25 @@ Plan: Balanced.
 | Scenario | Delay avoided |
 |---|---|
 | Hosur flood | 5 of 7 late order-days |
-| Smelter flood (S20, 8 days) | 4 of 5 late order-days |
+| Smelter flood (S20, 8 days) | 5 of 5 late order-days |
 | Pune fire | 5 of 14 late order-days |
 | Chennai port closure | 6 of 6 late order-days |
-| Li-ion tariff increase | Remaining duty cost Rs 192.96 lakh; Rs 31.61 lakh avoided (of Rs 224.57 lakh) |
+| Li-ion tariff increase | No late orders; Rs 26.32 lakh of the Rs 224.57 lakh extra duty avoided |
 
 ## 4. Live Showcase Results
 
-Source: `results/showcase_runs.md`  
+Source: `results/showcase_runs.md` (rerun 3 Nov 2026, approving every escalation)  
 Environment: SQLite (local)  
-Date: 2026-11-01.
+Date: 2026-11-03.
 
 | Scenario | Agent messages before approvals | Messages incl. approvals | Autonomous actions | Human escalations |
 |---|---:|---:|---:|---:|
 | Chennai port closure | 8 | 14 | 0 | 3 |
 | Li-ion tariff spike | 24 | 42 | 5 | 9 |
 | Tamil Nadu transport strike | 8 | 10 | 1 | 1 |
-| Chained disruption | 42 | 66 | 6 | 12 |
+| Chained disruption | 42 | 64 | 6 | 11 |
 
-On the slide, say "42 agent messages, 66 including the 12 human approvals" for the chained run. Both numbers are measured;
+On the slide, say "42 agent messages, 64 including the 11 human approvals" for the chained run (Rs 47.89 lakh extra cost after approving all). Both numbers are measured;
 see the note in `showcase_runs.md` for how they were checked.
 
 ## 5. Manual Baseline
@@ -86,8 +88,8 @@ Source: `results/planner_acceptance.md`.
 Suggested measured example: Smelter flood (S20, 8 days).
 
 - 4 purchase orders changed.
-- Rs 1.28 lakh additional cost.
-- 4 of 5 late order-days avoided.
+- Rs 1.58 lakh additional cost, of which Rs 24,195 is extra freight to the farther backup supplier.
+- 5 of 5 late order-days avoided.
 - 2 of 2 high-priority customer orders kept on time.
 
 Source: `results/plan_comparison.csv`.

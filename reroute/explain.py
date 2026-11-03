@@ -167,19 +167,40 @@ def _template(f: dict) -> str:
     where = f" in {e['location']}" if e["location"] else ""
     label = {"port": "port closure", "power": "power cut", "transport": "transport disruption",
              "equipment": "breakdown"}.get(e["type"], e["type"])
-    lines = [f"A {label}{where} is expected to last about {e['expected_days']} days. "
-             f"{s['suppliers_down']} suppliers are affected ({s['tier2_plus_down']} of them Tier-2 or deeper), "
-             f"putting {s['pos_at_risk']} purchase orders worth {inr(s['po_value_at_risk'])} at risk. "
-             f"Without action, {s['sales_orders_late']} customer orders slip ({s['high_priority_late']} high-priority), "
-             f"{s['baseline_late_days']} order-days late in total."]
+    n_sup, deep = s["suppliers_down"], s["tier2_plus_down"]
+    affected = (f"{_count(n_sup, 'supplier is', 'suppliers are')} affected"
+                + (f" ({deep} of them Tier-2 or deeper)" if deep and n_sup > 1 else " (Tier-2 or deeper)" if deep else ""))
+    if s["sales_orders_late"]:
+        late = (f"Without action, {_count(s['sales_orders_late'], 'customer order slips', 'customer orders slip')}"
+                + (f" ({s['high_priority_late']} high-priority)" if s["high_priority_late"] else "")
+                + f", {_count(s['baseline_late_days'], 'order-day', 'order-days')} late in total.")
+    else:
+        late = "Plant stock covers the delay, so no customer order would be late."
+    lines = [f"A {label}{where} is expected to last about {e['expected_days']} days. {affected}, putting "
+             f"{_count(s['pos_at_risk'], 'purchase order', 'purchase orders')} worth {inr(s['po_value_at_risk'])} at risk. "
+             + late]
     for p in f["plans"]:
         t = p["totals"]
         tag = " (recommended)" if p["recommended"] else ""
-        lines.append(f"- {p['name']}{tag}: changes {t['pos_changed']} POs for {inr(t['extra_cost'])} extra, "
-                     f"avoids {t['delay_avoided_days']} order-days of delay, keeps "
-                     f"{t['high_priority_protected']} of {t['high_priority_affected']} high-priority orders on time.")
-    lines.append("Before approving, confirm the alternate suppliers' spare capacity by phone.")
+        if not t["pos_changed"]:
+            lines.append(f"- {p['name']}{tag}: changes no purchase order"
+                         + (f"; {_count(t['late_days_before'], 'order-day', 'order-days')} stay late." if t["late_days_before"] else "."))
+            continue
+        line = (f"- {p['name']}{tag}: changes {_count(t['pos_changed'], 'PO', 'POs')} for {inr(t['extra_cost'])} extra")
+        if t["late_days_before"]:
+            line += f", avoids {t['delay_avoided_days']} of {_count(t['late_days_before'], 'order-day', 'order-days')} of delay"
+        else:
+            line += " to bring parts in sooner; customers are on time either way"
+        if t["high_priority_affected"]:
+            line += f", keeps {t['high_priority_protected']} of {t['high_priority_affected']} high-priority orders on time"
+        lines.append(line + ".")
+    if any(p["totals"]["pos_changed"] for p in f["plans"]):
+        lines.append("Before approving, confirm the alternate suppliers' spare capacity by phone.")
     return "\n".join(lines)
+
+
+def _count(n, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
 
 
 def answer(question: str, impact: dict, plans: list, history: list | None = None) -> tuple:

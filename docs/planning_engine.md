@@ -25,7 +25,9 @@ Each option is scored on cost, delay and customer service (lower is better). Thr
 
 The Balanced weights are set in `reroute/config.py` by judgement. They were not tuned against the results.
 
-Lowest cost was 0.65 / 0.15 / 0.20 until 3 Nov. With those weights waiting (Rs 0 extra) always scored better than even an 8% expedite, so the plan almost never changed anything. At 0.50 / 0.20 / 0.30 cost still leads, but a cheap expedite or switch can beat waiting. Fastest recovery and Balanced are unchanged.
+Lowest cost was 0.65 / 0.15 / 0.20 until 3 Nov. With those weights waiting (Rs 0 extra) always scored better than even an 8% expedite, so the plan almost never changed anything. At 0.50 / 0.20 / 0.30 cost still leads, but a cheap expedite or switch can beat waiting. Balanced is unchanged.
+
+Fastest recovery has one extra step (also 3 Nov). Planning one PO at a time, it could switch a PO whose customer order plant stock already protects and so use up the spare capacity a later PO needed; in the smelter flood it then avoided fewer late order-days than Balanced while costing more. After its first pass, a PO that is still late may now take a switched PO's capacity when that PO's customer stays on time without it. A hand-over is kept only if total customer delay goes down, and the giving order's card says so ("Gave its spare capacity at ... to PO ...").
 
 Two rules in the scoring matter when explaining results:
 
@@ -69,21 +71,21 @@ Produced with `python -m scripts.compare_plans` (`results/plan_comparison.csv`).
 | Hosur flood | Fastest recovery | 21 | Rs 6.36 lakh | 5 of 7 | 3 of 3 |
 | Hosur flood | Lowest cost | 8 | Rs 2.24 lakh | 4 of 7 | 3 of 3 |
 | Hosur flood | Balanced | 10 | Rs 3.44 lakh | 5 of 7 | 3 of 3 |
-| Smelter flood | Fastest recovery | 8 | Rs 2.42 lakh | 4 of 5 | 2 of 2 |
+| Smelter flood | Fastest recovery | 8 | Rs 2.47 lakh | 5 of 5 | 2 of 2 |
 | Smelter flood | Lowest cost | 2 | Rs 0.55 lakh | 3 of 5 | 2 of 2 |
 | Smelter flood | Balanced | 4 | Rs 1.58 lakh | 5 of 5 | 2 of 2 |
 | Pune fire | Fastest recovery | 8 | Rs 6.41 lakh | 5 of 14 | 0 of 3 |
 | Pune fire | Lowest cost | 0 | Rs 0 | 0 of 14 | 0 of 3 |
 | Pune fire | Balanced | 5 | Rs 3.92 lakh | 5 of 14 | 0 of 3 |
-| Chennai port | Fastest recovery | 8 | Rs 31.46 lakh | 5 of 6 | 2 of 2 |
+| Chennai port | Fastest recovery | 7 | Rs 24.57 lakh | 6 of 6 | 2 of 2 |
 | Chennai port | Lowest cost | 3 | Rs 8.71 lakh | 6 of 6 | 2 of 2 |
 | Chennai port | Balanced | 3 | Rs 9.09 lakh | 6 of 6 | 2 of 2 |
 | Li-ion tariff | All three plans | 14 | Rs 198.26 lakh of duty still paid; Rs 26.32 lakh avoided of Rs 224.57 lakh | No late orders | None at risk |
 
 ## 5. What the results show
 
-- **Smelter flood:** Balanced avoids all 5 late order-days for Rs 1.58 lakh. Fastest recovery spends Rs 2.42 lakh, changes 8 POs and avoids 4 (PO 4500000001 is expedited and stays 1 day late). Lowest cost protects both high-priority orders for Rs 0.55 lakh by changing 2 POs, but leaves 2 order-days late on Medium orders.
-- **Chennai port:** Balanced and Lowest cost both avoid all 6 late order-days. The only difference is high-priority PO 4500000021 (40 units): Lowest cost expedites it for Rs 68,800 and it reaches the plant 3 days late; Balanced switches it to Pune Battery Systems for Rs 1,07,006 and it reaches the plant 1 day late. Plant stock covers both, so the customer order is on time either way; Balanced pays the Rs 0.38 lakh difference to lean less on that stock. Fastest recovery spends Rs 31.46 lakh and avoids only 5: it switched high-priority PO 4500000029 (400 units) although plant stock already absorbed its delay, which used up the spare capacity Medium PO 4500000005 needed. Shared spare capacity means the order of planning matters.
+- **Smelter flood:** Balanced avoids all 5 late order-days for Rs 1.58 lakh with 4 POs changed. Fastest recovery also avoids all 5 but changes 8 POs for Rs 2.47 lakh: it expedites orders whose customers are already covered so the parts arrive sooner. High-priority PO 4500000017 gives its Coimbatore capacity to Medium PO 4500000001, whose customer would otherwise be 1 day late. Lowest cost protects both high-priority orders for Rs 0.55 lakh by changing 2 POs, but leaves 2 order-days late on Medium orders.
+- **Chennai port:** Balanced and Lowest cost both avoid all 6 late order-days. The only difference is high-priority PO 4500000021 (40 units): Lowest cost expedites it for Rs 68,800 and it reaches the plant 3 days late; Balanced switches it to Pune Battery Systems for Rs 1,07,006 and it reaches the plant 1 day late. Plant stock covers both, so the customer order is on time either way; Balanced pays the Rs 0.38 lakh difference to lean less on that stock. Fastest recovery also avoids all 6 but spends Rs 24.57 lakh on 7 changes, mostly expedites that bring parts in sooner. High-priority PO 4500000029 (400 units) gives its Pune Battery Systems capacity to Medium PO 4500000005, because plant stock already covers PO 4500000029's customer. Shared spare capacity means the order of planning matters.
 - **Pune fire:** No plan protects the 3 high-priority orders (0 of 3), because there is no quick alternative magnet source. Lowest cost changes nothing; Balanced still avoids 5 of 14 late order-days. The earlier we know, the more options exist.
 - **Tariff:** Nothing is late, so the three plans differ only on cost and all make the same 14 switches. Pune Battery Systems has 2,400 units of spare capacity over the 4-week horizon (600 per week x 4); the 14 switched orders use 2,370 of them. The other 26 orders wait and pay the higher duty. Cost avoided is Rs 26.32 lakh of Rs 224.57 lakh (about 12%).
 - **Hidden dependency:** The Coimbatore backup wheel maker buys part of its aluminium from the flooded smelter, so it is also slowed. ReRoute still uses it, just later. A view of direct suppliers alone would assume the backup is safe.
@@ -106,5 +108,5 @@ supplier matching precision 88% and recall 82%. See `results/slide6_numbers.md`.
 - **How did you choose the weights?** By judgement, in `config.py`. We did not tune them against the results.
 - **Why do the three tariff plans match?** Nothing is late, so the plans differ only on cost, and spare capacity at the domestic battery maker limits how many orders can move.
 - **Why recommend Balanced at the Chennai port when Lowest cost avoids the same delay for less?** For one small high-priority order, Lowest cost expedites (3 days late at the plant) and Balanced switches supplier (1 day late). Plant stock covers either, so the customer is on time both ways; Balanced pays Rs 38,206 more to leave more stock as a buffer. The planner sees both plans and can pick either.
-- **Why can a cheaper plan beat the "fastest" one?** Spare capacity is shared, so spending it on an order that stock already protects can leave a later order unprotected.
+- **Why does Fastest recovery cost more than Balanced for the same delay avoided?** It also expedites orders whose customers stock already covers, so parts arrive sooner at the plant. It never avoids less customer delay than Balanced: a still-late order can take backup capacity from one that doesn't need it.
 - **What can't the planner do?** Pune fire: with no alternative source of a Tier-2 input, no plan can save the high-priority orders.

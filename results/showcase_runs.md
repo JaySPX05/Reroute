@@ -1,5 +1,23 @@
 # Live showcase runs
 
+## Rerun, 3 November 2026 (current numbers)
+
+Headless rerun of the four Live showcase scenarios after shared capacity booking across disruptions (#23):
+`network.Network(T, persist=True, use_llm=False)` on SQLite, approving every escalation. The same counts were
+seen in the browser (Start Simulation, then Approve all) and Verify audit trail reported the chain intact.
+
+| Disruption | Messages before approvals | Messages incl. approvals | Done by agents alone | Sent to human | Extra cost after approving all |
+|---|---:|---:|---:|---:|---:|
+| Chennai port closure | 8 | 14 | 0 | 3 | Rs 9.09 lakh |
+| Li-ion cell tariff spike | 24 | 42 | 5 | 9 | Rs 46.29 lakh |
+| Tamil Nadu transport strike | 8 | 10 | 1 | 1 | Rs 2.56 lakh |
+| Chained (all three, plus the cricket headline) | 42 | 64 | 6 | 11 | Rs 47.89 lakh |
+
+The chained run now escalates 11 changes instead of 12: the tariff step plans with the backup capacity the port closure
+already booked, so one fewer switch is possible. Extra costs include freight to farther suppliers.
+
+## First run, 1 November 2026 (before freight and shared booking; kept for the record)
+
 Run on: SQLite (local)  
 Date: 2026-11-01  
 Run by: Kavana
