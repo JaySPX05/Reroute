@@ -705,7 +705,7 @@ show_simulation_metrics(net, performance_slots)
 
 
 if not net:
-    banner.info("Pick a disruption in the sidebar and press **Start Simulation**.")
+    banner.info("Pick a disruption at the top right and press **Start Simulation**.")
     show_graph(graph_slot)
     page_footer(STATUS)
     st.stop()

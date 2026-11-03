@@ -1013,7 +1013,7 @@ def show_reports_at_a_glance(reports: pd.DataFrame):
         })
     st.dataframe(pd.DataFrame(table), hide_index=True, width="stretch")
     st.caption("Each report is analysed on its own, newest first. To see a report's three plans and approve one, "
-               "switch the sidebar to **One report** and pick it.")
+               "switch the view on the left to **One report** and pick it.")
     network_map(pd.DataFrame([{"supplier_id": k, "via": v} for k, v in down.items()]))
 
 
@@ -1031,12 +1031,12 @@ if not res:
     with header_area:
         st.title("ReRoute ")
         st.caption("Supply Chain Resilience")
-        st.caption("Select a signal in the sidebar to assess its effect on the supplier network.")
+        st.caption("Select a signal on the left to assess its effect on the supplier network.")
     with left_card:
         st.divider()
         st.markdown('<div class="rr-section-kicker">ACTIVE EVENT</div>', unsafe_allow_html=True)
         st.markdown("#### Disruption intelligence")
-        st.info("No analysis is selected. Choose a demo signal, paste an alert, or select a supplier report in the sidebar.")
+        st.info("No analysis is selected. Choose a demo signal, paste an alert, or select a supplier report above.")
     with map_col:
         network_map()
     with intel_card:
