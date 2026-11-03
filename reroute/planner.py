@@ -25,18 +25,58 @@ FREIGHT_RS_PER_KM = config.FREIGHT_RS_PER_KM   # road freight for one truckload 
 ROAD_FACTOR = config.ROAD_FACTOR   # roads are longer than the straight line (set in .env)
 
 
-def _plant_km(supplier_id, tables) -> float:
-    """Road distance in km from a supplier to our plant (straight line x ROAD_FACTOR)."""
+_KM_CACHE = []   # [(meta, cities, suppliers, {supplier_id: km})], newest last
+
+
+def _km_by_supplier(tables) -> dict:
+    """Road km to the plant for every supplier, worked out once per set of tables.
+
+    The planner asks for these distances hundreds of times per plan; re-indexing the tables on each
+    call made planning several times slower. The cache keeps the table objects themselves and checks
+    identity, so reloaded tables are always worked out afresh.
+    """
+    frames = (tables["meta"], tables["cities"], tables["suppliers"])
+    for *cached, km in _KM_CACHE:
+        if all(a is b for a, b in zip(cached, frames)):
+            return km
     plant = tables["meta"].set_index("key").loc["plant", "value"]
     c = tables["cities"].set_index("city").loc[plant]
-    s = tables["suppliers"].set_index("supplier_id").loc[supplier_id]
-    return haversine_km(c["lat"], c["lon"], s["lat"], s["lon"]) * ROAD_FACTOR
+    km = {s.supplier_id: haversine_km(c["lat"], c["lon"], s.lat, s.lon) * ROAD_FACTOR
+          for s in tables["suppliers"].itertuples()}
+    _KM_CACHE.append((*frames, km))
+    del _KM_CACHE[:-4]
+    return km
+
+
+def _plant_km(supplier_id, tables) -> float:
+    """Road distance in km from a supplier to our plant (straight line x ROAD_FACTOR)."""
+    return _km_by_supplier(tables)[supplier_id]
 
 PLAN_WEIGHTS = {
     "Fastest recovery": {"cost": 0.10, "delay": 0.55, "service": 0.35},
     "Lowest cost": {"cost": 0.65, "delay": 0.15, "service": 0.20},
     "Balanced": config.WEIGHTS_BALANCED,
 }
+
+
+def _alternates(sm, material_id, exclude_supplier) -> list:
+    """Rows of supplier_materials for this material from other suppliers, in table order.
+
+    Grouped once per table: filtering the DataFrame for every PO, twice per PO, was most of the planning time.
+    """
+    for cached, groups in _ALT_CACHE:
+        if cached is sm:
+            break
+    else:
+        groups = {}
+        for r in sm.itertuples():
+            groups.setdefault(r.material_id, []).append(r)
+        _ALT_CACHE.append((sm, groups))
+        del _ALT_CACHE[:-4]
+    return [r for r in groups.get(material_id, []) if r.supplier_id != exclude_supplier]
+
+
+_ALT_CACHE = []   # [(supplier_materials, {material_id: [rows]})], newest last
 
 
 def _options(po, today, tables, down_days, spare):
@@ -52,9 +92,7 @@ def _options(po, today, tables, down_days, spare):
         opts.append({"action": "expedite", "alt_supplier_id": "",
                      "delay_days": max(0, int(po.delay_days) - EXPEDITE_SAVES_DAYS),
                      "extra_cost": round(po.value * EXPEDITE_COST_SHARE, 2)})
-    sm = tables["supplier_materials"]
-    alts = sm[(sm["material_id"] == po.material_id) & (sm["supplier_id"] != po.supplier_id)]
-    for a in alts.itertuples():
+    for a in _alternates(tables["supplier_materials"], po.material_id, po.supplier_id):
         if spare.get((a.supplier_id, po.material_id), 0) < po.qty:
             continue
         arrival = today + timedelta(days=int(down_days.get(a.supplier_id, 0)) + int(a.lead_days))
@@ -89,9 +127,8 @@ def _capacity_note(po, sm, spare, booked, sup_names, only: str = "") -> str:
 
     Names the earlier POs that booked the rest, so the planner sees the plans don't clash.
     """
-    alts = sm[(sm["material_id"] == po.material_id) & (sm["supplier_id"] != po.supplier_id)]
     notes = []
-    for a in alts.itertuples():
+    for a in _alternates(sm, po.material_id, po.supplier_id):
         if only and a.supplier_id != only:
             continue
         left = spare.get((a.supplier_id, po.material_id), 0)
