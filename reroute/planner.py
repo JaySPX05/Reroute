@@ -54,7 +54,9 @@ def _plant_km(supplier_id, tables) -> float:
 
 PLAN_WEIGHTS = {
     "Fastest recovery": {"cost": 0.10, "delay": 0.55, "service": 0.35},
-    "Lowest cost": {"cost": 0.65, "delay": 0.15, "service": 0.20},
+    # cost still leads, but delay and service weigh enough that a cheap expedite or switch beats waiting:
+    # with 0.65 / 0.15 / 0.20 waiting (Rs 0) always won and the plan never changed anything
+    "Lowest cost": {"cost": 0.50, "delay": 0.20, "service": 0.30},
     "Balanced": config.WEIGHTS_BALANCED,
 }
 
@@ -174,7 +176,7 @@ def build_plan(impact: dict, tables, name: str, weights: dict, booked_before: di
     # (supplier_id, material_id) -> [(po_id, qty, where)]: capacity already given to other POs
     booked = {k: [(pid, q, f"an earlier disruption ({lab})") for pid, q, lab in v]
               for k, v in (booked_before or {}).items()}
-    chosen = []
+    chosen, planned = [], []
     for po in pos.itertuples():
         opts = _options(po, today, tables, down_days, spare)
         best = min(opts, key=lambda o: (_score(o, po, weights), o["extra_cost"]))
@@ -186,18 +188,88 @@ def build_plan(impact: dict, tables, name: str, weights: dict, booked_before: di
         if best["action"] == "switch":
             spare[(best["alt_supplier_id"], po.material_id)] -= po.qty
             booked.setdefault((best["alt_supplier_id"], po.material_id), []).append((po.po_id, int(po.qty), ""))
-        chosen.append({
-            "po_id": po.po_id, "sales_order_id": po.for_sales_order_id, "so_priority": po.so_priority,
-            "material": po.material, "qty": int(po.qty), "from_supplier": po.supplier,
-            "action": best["action"],
-            "to_supplier": sup_names.get(best["alt_supplier_id"], "") if best["alt_supplier_id"] else "",
-            "delay_before": int(po.delay_days), "delay_after": best["delay_days"],
-            "so_late_after": best["so_late_days"], "extra_cost": best["extra_cost"],
-            "value": float(po.value), "options_considered": len(opts),
-            "capacity_note": note,
-        })
-    actions = pd.DataFrame(chosen)
+        chosen.append({**_row(po, best, len(opts), note, sup_names), "_only": ideal["alt_supplier_id"]})
+        planned.append(po)
+    if name == "Fastest recovery" and weeks == 1:
+        _free_capacity_for_late_orders(chosen, planned, impact, tables, today, down_days, spare, booked, sup_names)
+        # capacity moved between orders: rewrite the "not switched" notes from the final bookings
+        for po, row in zip(planned, chosen):
+            if row["capacity_note"].startswith("Not switched"):
+                row["capacity_note"] = _capacity_note(po, sm, spare, booked, sup_names, only=row.get("_only", ""))
+    actions = pd.DataFrame(chosen).drop(columns=["_alt", "_only"], errors="ignore")
     return {"name": name, "actions": actions, "totals": _totals(impact, actions)}
+
+
+def _row(po, opt, n_opts, note, sup_names) -> dict:
+    return {
+        "po_id": po.po_id, "sales_order_id": po.for_sales_order_id, "so_priority": po.so_priority,
+        "material": po.material, "qty": int(po.qty), "from_supplier": po.supplier,
+        "action": opt["action"],
+        "to_supplier": sup_names.get(opt["alt_supplier_id"], "") if opt["alt_supplier_id"] else "",
+        "delay_before": int(po.delay_days), "delay_after": opt["delay_days"],
+        "so_late_after": opt["so_late_days"], "extra_cost": opt["extra_cost"],
+        "value": float(po.value), "options_considered": n_opts,
+        "capacity_note": note, "_alt": opt["alt_supplier_id"],
+    }
+
+
+def _free_capacity_for_late_orders(chosen, planned, impact, tables, today, down_days, spare, booked, sup_names):
+    """Fastest recovery only: hand a backup supplier's capacity from an order that doesn't need it to one that does.
+
+    Planning one PO at a time, Fastest recovery can switch a PO whose customer order plant stock already
+    protects, and so use up the spare capacity a later PO needed to reach its customer on time (smelter
+    flood: Fastest avoided 4 of 5 late order-days for Rs 2.42 lakh while Balanced avoided 5 of 5 for
+    Rs 1.58 lakh). Here a still-late PO may take a switched PO's capacity when that PO's customer stays on
+    time without it. A swap is kept only if total customer delay goes down. Edits chosen, spare, booked.
+    """
+    def late_days():
+        return _totals(impact, pd.DataFrame(chosen))["late_days_after"]
+
+    inf = {k: float("inf") for k in spare}
+    for _ in range(len(chosen)):                       # at most one swap per pass; stop when none helps
+        base, swapped = late_days(), False
+        for i, po in enumerate(planned):
+            row = chosen[i]
+            if row["so_late_after"] == 0:
+                continue
+            targets = sorted((o for o in _options(po, today, tables, down_days, inf)
+                              if o["action"] == "switch" and o["so_late_days"] < row["so_late_after"]),
+                             key=lambda o: (o["so_late_days"], o["extra_cost"]))
+            for tgt in targets:
+                key = (tgt["alt_supplier_id"], po.material_id)
+                for j, dpo in enumerate(planned):
+                    d = chosen[j]
+                    if j == i or d["action"] != "switch" or d["_alt"] != key[0] or dpo.material_id != key[1]:
+                        continue
+                    if spare[key] + dpo.qty < po.qty:
+                        continue
+                    # the donor's best option without this supplier, keeping its customer as late as it is now
+                    keep = [o for o in _options(dpo, today, tables, down_days, {**spare, key: 0})
+                            if o["so_late_days"] <= d["so_late_after"]]
+                    if not keep:
+                        continue
+                    new_d = min(keep, key=lambda o: (o["so_late_days"], o["extra_cost"]))
+                    old_i, old_d = row, d
+                    chosen[i] = _row(po, tgt, row["options_considered"], "", sup_names)
+                    chosen[j] = _row(dpo, new_d, d["options_considered"],
+                                     f"Gave its spare capacity at {sup_names.get(key[0], key[0])} to PO {po.po_id}, "
+                                     f"whose customer order was late; this order's customer stays on time.", sup_names)
+                    if late_days() < base:
+                        spare[key] += dpo.qty - po.qty
+                        if new_d["action"] == "switch":
+                            spare[(new_d["alt_supplier_id"], dpo.material_id)] -= dpo.qty
+                            booked.setdefault((new_d["alt_supplier_id"], dpo.material_id), []).append(
+                                (dpo.po_id, int(dpo.qty), ""))
+                        booked[key] = [b for b in booked.get(key, []) if b[0] != dpo.po_id] + [(po.po_id, int(po.qty), "")]
+                        swapped = True
+                        break
+                    chosen[i], chosen[j] = old_i, old_d      # no better: undo
+                if swapped:
+                    break
+            if swapped:
+                break
+        if not swapped:
+            return
 
 
 def _totals(impact, actions) -> dict:

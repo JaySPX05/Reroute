@@ -116,9 +116,9 @@ def test_facts_give_totals_beyond_the_listed_changes():
 def test_capacity_note_names_who_booked_the_backup_and_only_when_it_mattered():
     res = agent.analyze_text("Chennai Port Authority: all container terminal operations suspended for 8 days.", T)
     acts = next(p for p in res["plans"] if p["name"] == "Fastest recovery")["actions"].set_index("po_id")
-    note = acts.loc[4500000005, "capacity_note"]
-    assert "Pune Battery Systems" in note and "only 40 spare left" in note
-    assert all(f"PO {po}" in note for po in (4500000013, 4500000021, 4500000029))
+    note = acts.loc[4500000045, "capacity_note"]
+    assert "Pune Battery Systems" in note and "only 140 spare left" in note and "10 short" in note
+    assert all(f"PO {po}" in note for po in (4500000013, 4500000021, 4500000005))
     # an order the plan would not switch even with unlimited room gets no capacity note
     res = agent.analyze_text("Heavy rain floods SIPCOT industrial estate in Hosur; units halted for 4-5 days.", T)
     acts = next(p for p in res["plans"] if p["name"] == "Balanced")["actions"]
@@ -152,3 +152,18 @@ def test_rejected_switch_frees_its_booking():
     net.decide(a["action_id"], approve=False, reason="test")
     assert sum(q for _, q, _ in net.booked[key]) == before - a["qty"]
     assert all(pid != a["po_id"] for pid, _, _ in net.booked[key])
+
+
+def test_fastest_recovery_never_avoids_less_delay_than_balanced():
+    """Fastest recovery hands backup capacity from orders that don't need it to orders that do."""
+    smelter = agent.analyze_report({"supplier_id": "S20", "issue_type": "flood", "days_down": 8, "note": ""}, T, save=False)
+    fast = next(p for p in smelter["plans"] if p["name"] == "Fastest recovery")
+    assert fast["totals"]["delay_avoided_days"] == 5          # was 4 of 5 before the capacity hand-over
+    gave = fast["actions"][fast["actions"]["capacity_note"].str.startswith("Gave its spare capacity")]
+    assert len(gave) and (gave["so_late_after"] == 0).all()   # the giver's customer stays on time
+    for text in ["Chennai Port Authority: all container terminal operations suspended for 8 days.",
+                 "Heavy rain floods SIPCOT industrial estate in Hosur; units halted for 4-5 days.",
+                 "Fire at a Pune magnet plant halts production for 10 days."]:
+        res = agent.analyze_text(text, T)
+        t = {p["name"]: p["totals"] for p in res["plans"]}
+        assert t["Fastest recovery"]["delay_avoided_days"] >= t["Balanced"]["delay_avoided_days"]

@@ -139,7 +139,12 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
     overflow: visible !important;
     text-overflow: clip !important;
 }}
-[data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; }}
+[data-testid="stMetricValue"] {{ color: var(--rr-text); font-weight: 720; font-size: clamp(1.3rem, 1.9vw, 2.1rem); line-height: 1.2; }}
+[data-testid="stMetricValue"] * {{
+    white-space: normal !important;   /* "Rs 31.46 lakh", "No late orders": wrap instead of "Rs 31.46 la..." */
+    overflow: visible !important;
+    text-overflow: clip !important;
+}}
 [data-testid="stMetricDelta"] {{ font-size: .75rem; }}
 .rr-workflow {{
     display: grid;
@@ -720,8 +725,12 @@ with tab_q:
                         else f"Expedite PO {a['po_id']} with **{a['from_supplier']}**")
                 st.markdown(f"{what} · {a['qty']} × {a['material']} · customer order {a['sales_order_id']} "
                             f"({a['so_priority']} priority)")
-                st.caption(f"Why it needs you: {a['rule']}. Extra cost {explain.inr(a['extra_cost'])}, "
-                           f"{explain.inr(a['net_cost'])} versus doing nothing. Delay {a['delay_before']} → {a['delay_after']} days.")
+                # versus doing nothing: after a tariff, doing nothing means paying the higher duty
+                versus = ("" if abs(a["net_cost"] - a["extra_cost"]) < 1 else
+                          f", saves {explain.inr(-a['net_cost'])} versus paying the higher duty" if a["net_cost"] < 0
+                          else f", {explain.inr(a['net_cost'])} more than paying the higher duty")
+                st.caption(f"Why it needs you: {a['rule']}. Extra cost {explain.inr(a['extra_cost'])}{versus}. "
+                           f"Delay {a['delay_before']} → {a['delay_after']} days.")
                 r1, r2, r3 = st.columns([4, 1, 1])
                 reason = r1.text_input("Reason (optional)", key=f"reason-{aid}", label_visibility="collapsed",
                                        placeholder="Reason (optional)")
@@ -743,10 +752,13 @@ with tab_plans:
                 st.dataframe(pd.DataFrame([{"plan": p["name"] + (" (recommended)" if p.get("recommended") else ""),
                                             "POs changed": p["totals"]["pos_changed"],
                                             "extra cost": explain.inr(p["totals"]["extra_cost"]),
-                                            "cost avoided": explain.inr(p["totals"]["cost_avoided"]),
-                                            "order-days avoided": f"{p['totals']['delay_avoided_days']} of {p['totals']['late_days_before']}",
-                                            "high-priority on time": f"{p['totals']['high_priority_protected']} of {p['totals']['high_priority_affected']}"}
+                                            "cost avoided": explain.cost_avoided_text(p["totals"]),
+                                            "order-days avoided": explain.delay_avoided_text(p["totals"]),
+                                            "high-priority on time": explain.high_priority_text(p["totals"])}
                                            for p in stt["plans"]]), hide_index=True, width="stretch")
+                note = explain.same_plans_note(stt["plans"])
+                if note:
+                    st.caption(note)
             if "impact" in stt:
                 st.dataframe(stt["impact"]["down"], hide_index=True, width="stretch")
 
