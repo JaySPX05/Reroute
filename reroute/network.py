@@ -207,9 +207,17 @@ class Network:
         where = f"across {ev.state}" if ev.scope == "state" else f"at {ev.location}" if ev.location else ""
         label = {"port": "Port closure", "tariff": "Tariff spike", "power": "Power cut",
                  "transport": "Transport disruption", "equipment": "Breakdown"}.get(ev.event_type, ev.event_type.title())
+        when = ""
+        if getattr(ev, "starts_in_days", 0):
+            start = impact.as_of(self.tables) + timedelta(days=ev.starts_in_days)
+            when = f" from {start.day} {start:%b}"
         what = (f"{label}: import duty on {', '.join(mats[m].lower() for m in ev.material_ids)} up {ev.cost_pct:.0f} points"
-                if ev.event_type == "tariff" else f"{label} {where}, about {ev.duration_days} days")
-        self.send("sentinel", "impact", "disruption.detected", f"{what}. Hits {hit}.",
+                if ev.event_type == "tariff" else f"{label} {where}, about {ev.duration_days} days{when}")
+        if getattr(ev, "alert_level", "") == "yellow":
+            what, verb = f"IMD yellow alert: {what[0].lower() + what[1:]}", "Puts on watch"
+        else:
+            verb = "Hits"
+        self.send("sentinel", "impact", "disruption.detected", f"{what}. {verb} {hit}.",
                   event_id=ev.event_id, event_type=ev.event_type, method=ev.method,
                   matched=[m["supplier_id"] for m in ev.matched])
 
@@ -221,6 +229,9 @@ class Network:
         if s["kind"] == "cost":
             text = (f"{s['suppliers_down']} suppliers pay more; {s['pos_at_risk']} open POs would cost "
                     f"{explain.inr(s['cost_increase_if_wait'])} extra if we do nothing.")
+        elif s.get("on_watch"):
+            text = (f"Yellow alert: {len(s['on_watch'])} suppliers on watch, none assumed down; "
+                    "nothing to replan unless IMD raises it to orange or red.")
         else:
             text = (f"{s['suppliers_down']} suppliers down ({s['tier2_plus_down']} Tier-2+); {s['pos_at_risk']} POs late; "
                     f"{s['sales_orders_late']} customer orders slip ({s['high_priority_late']} high-priority).")
@@ -231,8 +242,9 @@ class Network:
         eid = msg.data["event_id"]
         st = self.events[eid]
         if st["impact"]["summary"]["pos_at_risk"] == 0:
-            self.send("sourcing", "audit", "plan.none", "Stock and lead times absorb this event; no PO changes.",
-                      event_id=eid)
+            self.send("sourcing", "audit", "plan.none",
+                      "Suppliers on watch only; no PO changes." if st["impact"]["summary"].get("on_watch")
+                      else "Stock and lead times absorb this event; no PO changes.", event_id=eid)
             return
         plans = planner.build_plans(st["impact"], self.tables, booked_before=self.booked)
         st["plans"] = plans

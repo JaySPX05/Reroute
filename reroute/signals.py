@@ -7,6 +7,7 @@ import math
 import re
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import date, timedelta
 
 from . import llm
 
@@ -68,6 +69,8 @@ class Event:
     matched: list = field(default_factory=list)        # filled by match_suppliers()
     material_ids: list = field(default_factory=list)   # tariff events: the imported inputs affected
     cost_pct: float = 0.0                              # tariff events: rise in landed cost, percentage points
+    starts_in_days: int = 0                            # days from the data's "today" until it starts (alert dates)
+    alert_level: str = ""                              # IMD colour if named: yellow | orange | red
 
     def to_dict(self):
         return asdict(self)
@@ -142,6 +145,55 @@ def _tariff_details(text: str) -> tuple:
     return mats, max(0.0, pct)
 
 
+MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+_MONTH = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
+
+
+def _dates(text: str, today: date) -> list:
+    """Calendar dates written in the text ("November 3", "3 Nov", "3rd November"), in the order they appear.
+
+    The year is the data's year, or the next one when the date would otherwise be more than six months back.
+    """
+    low = text.lower()
+    found = []
+    for m in re.finditer(rf"\b{_MONTH}\s+{_DAY}\b|\b{_DAY}\s+(?:of\s+)?{_MONTH}", low):
+        month, day = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
+        try:
+            d = date(today.year, MONTHS[month[:3]], int(day))
+        except ValueError:
+            continue
+        if (today - d).days > 182:
+            d = date(today.year + 1, d.month, d.day)
+        found.append((m.start(), d))
+    return [d for _, d in sorted(found)]
+
+
+def alert_window(text: str, today: date):
+    """(starts_in_days, duration_days) from the dates in an alert, or None if it names no date.
+
+    "from November 3 to November 5" -> starts 5 days after 29 Oct, lasts 3 days. "till 6 Nov" -> from today.
+    duration_days is 0 when the window has already ended. Dates are read here, never left to the model.
+    """
+    ds = _dates(text, today)
+    if not ds:
+        return None
+    low = text.lower()
+    if len(ds) == 1 and re.search(rf"\b(?:till|until|upto|up to|through)\s+(?:{_DAY}\s+)?{_MONTH}|"
+                                  rf"\b(?:till|until|upto|up to|through)\s+{_DAY}", low):
+        start, end = today, ds[0]
+    else:
+        start, end = ds[0], ds[1] if len(ds) > 1 and ds[1] >= ds[0] else ds[0]
+    first = max(start, today)
+    return max(0, (start - today).days), max(0, (end - first).days + 1)
+
+
+def alert_level(text: str) -> str:
+    """The IMD colour named in the text: red, orange or yellow ("" if none)."""
+    m = re.search(r"\b(red|orange|yellow)\s+(?:colour\s+|color\s+)?(?:alert|warning)", text.lower())
+    return m.group(1) if m else ""
+
+
 def classify_rules(text: str, tables) -> dict:
     low = text.lower()
     scores = {t: sum(k in low for k in kws) for t, kws in KEYWORDS.items()}
@@ -154,7 +206,9 @@ def classify_rules(text: str, tables) -> dict:
         state = tables["cities"].set_index("city").loc[city, "state"]
     named = _find_suppliers(text, tables["suppliers"])
     statewide = any(w in low for w in ["statewide", "state-wide", "across the state", "across tamil nadu",
-                                       "across karnataka", "nationwide"])
+                                       "across karnataka", "nationwide",
+                                       # IMD subdivisions that hold all our suppliers in that state
+                                       "south interior karnataka", "interior tamil nadu"])
     scope = "site" if named else "state" if statewide else "city"
     severity = 2 + min(2, sum(w in low for w in HIGH_WORDS)) + (1 if scope == "state" else 0)
     mats, pct = [], 0.0
@@ -218,7 +272,21 @@ def classify_text(text: str, tables, source: str = "news", use_llm: bool = True)
         result, method = classify_rules(text, tables), "rules"
     keys = ["relevant", "event_type", "severity", "duration_days", "location", "state", "scope", "supplier_ids",
             "confidence", "material_ids", "cost_pct"]
-    return Event(event_id=_new_id(), source=source, text=text, method=method, **{k: result[k] for k in keys})
+    ev = Event(event_id=_new_id(), source=source, text=text, method=method, **{k: result[k] for k in keys})
+    if ev.event_type not in ("tariff", "none"):
+        # when it starts and how long it lasts come from the dates written in the alert, not from the model
+        today = date.fromisoformat(str(tables["meta"].set_index("key").loc["as_of", "value"]))
+        window = alert_window(text, today)
+        if window:
+            ev.starts_in_days, days = window
+            if days == 0:                       # the alert's dates are already over
+                ev.relevant, ev.duration_days = False, 0
+            else:
+                ev.duration_days = days
+        ev.alert_level = alert_level(text)
+        if ev.alert_level == "yellow":          # IMD yellow = "be aware": watch, don't plan for a shutdown
+            ev.severity = min(ev.severity, 2)
+    return ev
 
 
 def report_severity(days_down: int) -> int:

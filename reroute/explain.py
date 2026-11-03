@@ -18,6 +18,7 @@ leave it out.
 For a what-if the facts do not cover (a longer or shorter disruption, a different supplier, more orders),
 do not estimate the result: say the plan must be rerun in ReRoute with the new input. Never offer to take
 actions yourself; only the planner and ReRoute's agents act.
+If event.starts_on is later than summary.as_of, say the date it starts; the dates come from the alert.
 Each late sales order is one record: take its sales_order_id, customer, due_date and priority from that
 same record and never combine fields from different records.
 late_days and delay figures are forecasts of how late things will be if nothing is done, counted from
@@ -74,7 +75,9 @@ def facts(impact: dict, plans: list) -> dict:
     e = impact["event"]
     out = {
         "event": {"type": e.event_type, "source": e.source, "text": e.text, "location": e.location,
+                  "state": getattr(e, "state", ""),
                   "expected_days": e.duration_days, "severity_1_to_5": e.severity,
+                  "starts_on": impact["summary"].get("starts_on", ""), "imd_alert_colour": getattr(e, "alert_level", ""),
                   "cost_pct": getattr(e, "cost_pct", 0.0), "materials": getattr(e, "material_ids", [])},
         # Tier-1 count given outright so the model quotes it instead of subtracting
         "summary": {**impact["summary"], **({"tier1_down": impact["summary"]["suppliers_down"]
@@ -96,6 +99,7 @@ def facts(impact: dict, plans: list) -> dict:
             # totals over ALL changes, computed here, because "changes" below lists at most 12
             "changes_total": int(len(changed)),
             "units_switched": int(switched["qty"].sum()) if len(switched) else 0,
+            "units_expedited": int(changed[changed["action"] == "expedite"]["qty"].sum()) if len(changed) else 0,
             "customer_orders_late_after_plan": [{"sales_order_id": k, "late_days": int(v)}
                                                 for k, v in dict(late_after).items()],
             # alternate suppliers that had no spare capacity left, and who booked it (capped like "changes")
@@ -141,6 +145,8 @@ def for_model(f: dict) -> dict:
 def explain_plans(impact: dict, plans: list) -> tuple:
     """Returns (text, method)."""
     f = facts(impact, plans)
+    if impact["summary"].get("on_watch"):
+        return watch_text(impact), "template"
     if impact["summary"]["pos_at_risk"] == 0:
         return "No open purchase orders are at risk from this event. No action is needed; ReRoute will keep watching.", "template"
     msg = [{"role": "system", "content": SYSTEM},
@@ -149,6 +155,27 @@ def explain_plans(impact: dict, plans: list) -> tuple:
             "and say why the recommended plan is the best trade-off. End with one line on what the planner should check before approving."}]
     text = llm.chat(msg)
     return (text, "llm") if text else (_template(f), "template")
+
+
+def watch_text(impact: dict) -> str:
+    """IMD yellow alert: say who is on watch and why nothing is replanned."""
+    s, e = impact["summary"], impact["event"]
+    names = s["on_watch"]
+    when = _when(s.get("starts_on", ""), e.duration_days, getattr(e, "starts_in_days", 0))
+    return (f"IMD yellow alert{when}: yellow means \"be aware\", so no supplier is expected to stop work and nothing "
+            f"is replanned. {_count(len(names), 'supplier', 'suppliers')} in the area "
+            f"{'is' if len(names) == 1 else 'are'} on watch: {', '.join(names)}. "
+            "ReRoute replans as soon as IMD raises it to orange or red, or a supplier reports a problem.")
+
+
+def _when(starts_on: str, days: int, starts_in: int) -> str:
+    """ " from 3 Nov to 5 Nov" when the alert gave dates that start later; "" otherwise."""
+    if not starts_in or not starts_on:
+        return ""
+    from datetime import date, timedelta
+    d = date.fromisoformat(starts_on)
+    end = d + timedelta(days=max(1, days) - 1)
+    return f" from {d.day} {d:%b}" + (f" to {end.day} {end:%b}" if end != d else "")
 
 
 def _template(f: dict) -> str:
@@ -164,7 +191,7 @@ def _template(f: dict) -> str:
                          f"{inr(t['cost_avoided'])}; {t['sales_orders_late_after']} customer orders late.")
         lines.append("Before approving, confirm the alternate supplier's quality and capacity for the switched volume.")
         return "\n".join(lines)
-    where = f" in {e['location']}" if e["location"] else ""
+    where = f" in {e['location']}" if e["location"] else f" in {e['state']}" if e.get("state") else ""
     label = {"port": "port closure", "power": "power cut", "transport": "transport disruption",
              "equipment": "breakdown"}.get(e["type"], e["type"])
     n_sup, deep = s["suppliers_down"], s["tier2_plus_down"]
@@ -176,7 +203,8 @@ def _template(f: dict) -> str:
                 + f", {_count(s['baseline_late_days'], 'order-day', 'order-days')} late in total.")
     else:
         late = "Plant stock covers the delay, so no customer order would be late."
-    lines = [f"A {label}{where} is expected to last about {e['expected_days']} days. {affected}, putting "
+    when = _when(e.get("starts_on", ""), e["expected_days"], 1 if e.get("starts_on", "") > s.get("as_of", "") else 0)
+    lines = [f"A {label}{where} is expected to last about {e['expected_days']} days{when}. {affected}, putting "
              f"{_count(s['pos_at_risk'], 'purchase order', 'purchase orders')} worth {inr(s['po_value_at_risk'])} at risk. "
              + late]
     for p in f["plans"]:

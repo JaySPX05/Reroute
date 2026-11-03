@@ -93,12 +93,17 @@ def trace(event, tables) -> dict:
         po["delay_days"] = pd.Series(0, index=po.index, dtype="int64")
         po["cost_increase_pct"] = po["supplier_id"].map(pct).astype(float)
     else:
-        down = propagate_downtime({m["supplier_id"]: event.duration_days for m in event.matched}, tables)
+        # an IMD yellow alert ("be aware") puts suppliers on watch; nobody is assumed to stop work
+        watch = getattr(event, "alert_level", "") == "yellow"
+        down = propagate_downtime({} if watch else {m["supplier_id"]: event.duration_days for m in event.matched},
+                                  tables)
         down["cost_increase_pct"] = 0.0
         days_down = dict(zip(down["supplier_id"], down["days_down"]))
-        po = po[po["supplier_id"].isin(days_down)].copy()
+        # the outage starts when the alert says (e.g. "from November 3"); orders due before then arrive as planned
+        start = today + timedelta(days=int(getattr(event, "starts_in_days", 0) or 0))
+        po = po[po["supplier_id"].isin(days_down) & (po["due"] >= start)].copy()
         # row by row so an empty selection (no supplier hit) still works
-        po["restart"] = [today + timedelta(days=int(days_down[s])) for s in po["supplier_id"]]
+        po["restart"] = [start + timedelta(days=int(days_down[s])) for s in po["supplier_id"]]
         po["new_arrival"] = [r + timedelta(days=RESTART_LAG_DAYS) for r in po["restart"]]
         po["delay_days"] = pd.Series([max(0, (n - d).days) for n, d in zip(po["new_arrival"], po["due"])],
                                      index=po.index, dtype="int64")
@@ -135,6 +140,10 @@ def trace(event, tables) -> dict:
         "high_priority_late": int((sos["priority"] == "High").sum()),
         "baseline_late_days": int(sos["late_days"].sum()),
         "cost_increase_if_wait": round(float(po["extra_cost_wait"].sum()), 2),
+        "starts_on": (today + timedelta(days=int(getattr(event, "starts_in_days", 0) or 0))).isoformat(),
+        # IMD yellow alert: suppliers in the area, watched but not assumed down
+        "on_watch": ([sups.loc[m["supplier_id"], "name"] for m in event.matched]
+                     if kind == "delay" and getattr(event, "alert_level", "") == "yellow" else []),
     }
     return {"event": event, "down": down, "pos": po.reset_index(drop=True), "sales_orders": sos.reset_index(drop=True),
             "summary": summary}
