@@ -719,12 +719,17 @@ def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
     sup["lat"] = sup["lat"] + sup["n"] * 0.04
     sup["label"] = sup["name"] + " (" + sup["city"] + ")" + sup["supplier_id"].map(
         lambda s: "" if s not in status else f": {status[s]}")
+    sup = sup.assign(_hit=sup["supplier_id"].isin(status)).sort_values("_hit")   # affected suppliers drawn on top
     p = logistics.plant(T)
     plant_df = pd.DataFrame([{**p, "label": f"Our plant: {p['name']}"}])
+    # sizes in metres but capped in screen pixels, so dots don't grow over the map when you zoom in
+    # (pydeck turns string props such as radius_units="pixels" into expressions, so units can't be set that way)
     layers = [pdk.Layer("ScatterplotLayer", sup, get_position=["lon", "lat"], get_fill_color="color",
-                        get_radius=9000, radius_min_pixels=5, pickable=True),
+                        get_radius=9000, radius_min_pixels=5, radius_max_pixels=9, stroked=True,
+                        get_line_color=[255, 255, 255], get_line_width=0, line_width_min_pixels=1, pickable=True),
               pdk.Layer("ScatterplotLayer", plant_df, get_position=["lon", "lat"], get_fill_color=[31, 111, 235],
-                        get_radius=14000, radius_min_pixels=8, pickable=True)]
+                        get_radius=14000, radius_min_pixels=8, radius_max_pixels=12, stroked=True,
+                        get_line_color=[255, 255, 255], get_line_width=0, line_width_min_pixels=1.5, pickable=True)]
     pts = [(p["lat"], p["lon"])]
     if len(routes):
         r = routes.copy()
@@ -747,12 +752,47 @@ def route_map(down: pd.DataFrame, routes: pd.DataFrame, approved: bool):
                                     get_target_position=["to_lon", "to_lat"], get_color="color",
                                     get_width=5 if approved else 4, pickable=True))
     lats, lons = [a for a, _ in pts], [b for _, b in pts]
-    span = max(max(lats) - min(lats), max(lons) - min(lons), 1.0)
-    zoom = 6.5 if span < 2 else 5.5 if span < 5 else 4.6 if span < 10 else 3.8
+    span = max(max(lats) - min(lats), max(lons) - min(lons), 0.3 if len(routes) else 1.0)
+    zoom = 8.2 if span < 0.6 else 6.5 if span < 2 else 5.5 if span < 5 else 4.6 if span < 10 else 3.8
     view = pdk.ViewState(latitude=(max(lats) + min(lats)) / 2, longitude=(max(lons) + min(lons)) / 2, zoom=zoom,
                          pitch=0, bearing=0)
     st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_provider="carto",
                              map_style="light" if LIGHT_MODE else "dark", tooltip={"text": "{label}"}))
+
+
+def plan_route_summary(plan: dict) -> str:
+    """One line on what the plan does with each order: which go to a new supplier, which ship express, which stay."""
+    a = plan["actions"]
+    if a.empty:
+        return "No purchase order changes."
+
+    def n_pos(k):
+        return f"{k} PO{'' if k == 1 else 's'}"
+    parts = [f"switches {n_pos(len(g))} to {sup}" for sup, g in a[a["action"] == "switch"].groupby("to_supplier")]
+    parts += [f"expedites {n_pos(len(g))} with {sup}" for sup, g in a[a["action"] == "expedite"].groupby("from_supplier")]
+    stay = int((a["action"] == "wait").sum())
+    if stay:
+        parts.append(f"keeps {n_pos(stay)} as they are")
+    t = plan["totals"]
+    return (f"**{plan['name']}** {', '.join(parts)} · {explain.inr(t['extra_cost'])} · "
+            f"order-days avoided: {explain.delay_avoided_text(t)}")
+
+
+def same_routes_note(plans: list) -> str:
+    """When every plan draws the same lines, say so, and say what does differ."""
+    keys = []
+    for p in plans:
+        a = p["actions"]
+        keys.append(frozenset() if a.empty else frozenset(
+            (x.action, x.to_supplier if x.action == "switch" else x.from_supplier)
+            for x in a[a["action"] != "wait"].itertuples()))
+    if len(plans) < 2 or len(set(keys)) > 1 or not keys[0]:
+        return ""
+    counts = ", ".join(f"{p['name']} {p['totals']['pos_changed']}" for p in plans)
+    why = ("No other supplier can deliver sooner, so every plan ships express from the same supplier. "
+           if all(act == "expedite" for act, _ in keys[0]) else "")
+    return (f"All three plans use the same routes for this event. {why}"
+            f"They differ in how many orders take them (POs changed: {counts}).")
 
 
 def customer_order_risk(result: dict) -> pd.DataFrame:
@@ -1212,8 +1252,12 @@ with route_area:
                         format_func=lambda n: f"{n} (approved)" if n == approved_name else n)
         chosen_plan = next(p for p in plans if p["name"] == pick)
         is_approved = pick == approved_name
+        st.markdown(plan_route_summary(chosen_plan))
         r = logistics.routes(T, imp, chosen_plan)
         route_map(imp["down"], r, is_approved)
+        note = same_routes_note(plans)
+        if note:
+            st.info(note)
         st.caption("Routes are drawn directly between supplier and plant, not along actual roads. "
                    "Hover over a dot or route for details.")
         if len(r):
